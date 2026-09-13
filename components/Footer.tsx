@@ -39,10 +39,20 @@ export default function Footer() {
               <li>📍 Lalchandpura, Jaipur</li>
               <li>🕐 Mon – Sat, 8:00 AM</li>
             </ul>
+            <div className="mt-4 pt-3 border-t border-navy-800">
+              <h4 className="text-white font-semibold mb-2 text-sm">Website Owner</h4>
+              <ul className="space-y-1.5 text-sm">
+                <li className="text-white font-medium">Sumit Jilowa</li>
+                <li>📞 <a href="tel:7742936593" className="hover:text-saffron-400">7742936593</a></li>
+                <li>✉️ <a href="mailto:sumitjilowa34@gmail.com" className="hover:text-saffron-400 break-all">sumitjilowa34@gmail.com</a></li>
+              </ul>
+            </div>
           </div>
         </div>
         <div className="border-t border-navy-800 mt-10 pt-6 text-center text-xs text-slate-500">
           © {new Date().getFullYear()} Mahatma Gandhi Government English Medium School, Lalchandpura. All rights reserved.
+          <br />
+          <span className="text-slate-400">Website by Sumit Jilowa · 7742936593 · sumitjilowa34@gmail.com</span>
         </div>
       </div>
     </footer>

@@ -30,14 +30,41 @@ export default function ContactPage() {
             </p>
           </div>
           <div className="card">
-            <h2 className="font-bold text-navy-800 mb-3">📞 Phone</h2>
+            <h2 className="font-bold text-navy-800 mb-3">📞 School Phone</h2>
             <a href="tel:7742936593" className="text-2xl font-bold text-navy-700 hover:text-saffron-600">7742936593</a>
             <p className="text-sm text-slate-500 mt-1">Mon – Sat, from 8:00 AM</p>
+          </div>
+          <div className="card border-l-4 border-l-saffron-500">
+            <h2 className="font-bold text-navy-800 mb-3">👤 Website Owner</h2>
+            <p className="text-lg font-semibold text-navy-900">Sumit Jilowa</p>
+            <ul className="mt-2 space-y-1.5 text-sm text-slate-600">
+              <li>
+                📞{" "}
+                <a href="tel:7742936593" className="text-navy-700 font-medium hover:text-saffron-600">
+                  7742936593
+                </a>
+              </li>
+              <li>
+                ✉️{" "}
+                <a href="mailto:sumitjilowa34@gmail.com" className="text-navy-700 font-medium hover:text-saffron-600 break-all">
+                  sumitjilowa34@gmail.com
+                </a>
+              </li>
+            </ul>
           </div>
           <div className="card">
             <h2 className="font-bold text-navy-800 mb-3">🗺️ Location Map</h2>
             <div className="rounded-lg overflow-hidden border border-slate-200 aspect-video bg-slate-100">
-              <iframe title="School Location" src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3557.5!2d75.7!3d26.95!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMjbCsDU3JzAwLjAiTiA3NcKwNDInMDAuMCJF!5e0!3m2!1sen!2sin!4v1" width="100%" height="100%" style={{ border: 0 }} allowFullScreen loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
+              <iframe
+                title="School Location"
+                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3557.5!2d75.7!3d26.95!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMjbCsDU3JzAwLjAiTiA3NcKwNDInMDAuMCJF!5e0!3m2!1sen!2sin!4v1"
+                width="100%"
+                height="100%"
+                style={{ border: 0 }}
+                allowFullScreen
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
             </div>
           </div>
         </div>
