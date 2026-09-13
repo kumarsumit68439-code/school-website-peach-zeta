@@ -2,12 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-
-/**
- * Background sync: localStorage <-> Supabase
- * All existing pages keep using localStorage;
- * this component mirrors data to cloud so every device sees the same data.
- */
+import { firebasePushAll, firebasePullAll } from "@/lib/firebaseSync";
 
 function safeParse(key: string, fallback: unknown = []) {
   try {
@@ -25,8 +20,7 @@ function setLocal(key: string, value: unknown) {
   }
 }
 
-async function pullAll() {
-  // Users
+async function supabasePull() {
   {
     const { data } = await supabase.from("chat_users").select("*");
     if (data?.length) {
@@ -43,7 +37,6 @@ async function pullAll() {
       );
     }
   }
-  // Messages
   {
     const { data } = await supabase
       .from("chat_messages")
@@ -71,7 +64,6 @@ async function pullAll() {
       );
     }
   }
-  // Groups
   {
     const { data } = await supabase.from("chat_groups").select("*");
     if (data?.length) {
@@ -88,7 +80,6 @@ async function pullAll() {
       );
     }
   }
-  // Group messages
   {
     const { data } = await supabase
       .from("chat_group_messages")
@@ -116,7 +107,6 @@ async function pullAll() {
       );
     }
   }
-  // Locations
   {
     const { data } = await supabase.from("locations").select("*").order("updated_at", { ascending: false });
     if (data?.length) {
@@ -135,7 +125,6 @@ async function pullAll() {
       );
     }
   }
-  // Festivals
   {
     const { data } = await supabase.from("festivals").select("*").order("created_at", { ascending: false });
     if (data?.length) {
@@ -154,7 +143,6 @@ async function pullAll() {
       );
     }
   }
-  // Mistakes
   {
     const { data } = await supabase.from("mistakes").select("*").order("created_at", { ascending: false });
     if (data?.length) {
@@ -175,7 +163,6 @@ async function pullAll() {
       );
     }
   }
-  // Attendance
   {
     const { data } = await supabase.from("attendance").select("*").order("created_at", { ascending: false });
     if (data?.length) {
@@ -195,7 +182,6 @@ async function pullAll() {
       );
     }
   }
-  // Admissions
   {
     const { data } = await supabase.from("admissions").select("*").order("created_at", { ascending: false });
     if (data?.length) {
@@ -214,7 +200,6 @@ async function pullAll() {
       );
     }
   }
-  // Notices
   {
     const { data } = await supabase.from("notices").select("*").order("created_at", { ascending: false });
     if (data?.length) {
@@ -232,8 +217,7 @@ async function pullAll() {
   }
 }
 
-async function pushAll() {
-  // Users
+async function supabasePush() {
   {
     const users = safeParse("schoolChatUsers", []) as Array<Record<string, string>>;
     if (users.length) {
@@ -248,7 +232,6 @@ async function pushAll() {
       );
     }
   }
-  // Messages (last 200)
   {
     const msgs = (safeParse("schoolChatMessages", []) as Array<Record<string, string>>).slice(-200);
     if (msgs.length) {
@@ -267,7 +250,6 @@ async function pushAll() {
       );
     }
   }
-  // Groups
   {
     const groups = safeParse("schoolChatGroups", []) as Array<Record<string, unknown>>;
     if (groups.length) {
@@ -282,7 +264,6 @@ async function pushAll() {
       );
     }
   }
-  // Group messages
   {
     const msgs = (safeParse("schoolChatGroupMessages", []) as Array<Record<string, string>>).slice(-200);
     if (msgs.length) {
@@ -301,7 +282,6 @@ async function pushAll() {
       );
     }
   }
-  // Locations
   {
     const locs = safeParse("schoolLocations", []) as Array<Record<string, unknown>>;
     if (locs.length) {
@@ -319,13 +299,13 @@ async function pushAll() {
       );
     }
   }
-  // Festivals — skip huge base64 if over ~800kb
   {
-    const items = safeParse("schoolFestivals", []) as Array<Record<string, string>>;
-    const small = items.filter((i) => !i.url || i.url.length < 800000).slice(0, 50);
-    if (small.length) {
+    const items = (safeParse("schoolFestivals", []) as Array<Record<string, string>>)
+      .filter((i) => !i.url || i.url.length < 800000)
+      .slice(0, 50);
+    if (items.length) {
       await supabase.from("festivals").upsert(
-        small.map((i) => ({
+        items.map((i) => ({
           id: i.id,
           title: i.title,
           media_type: i.type,
@@ -337,15 +317,13 @@ async function pushAll() {
       );
     }
   }
-  // Mistakes
   {
-    const items = safeParse("schoolMistakes", []) as Array<Record<string, string>>;
-    const small = items
+    const items = (safeParse("schoolMistakes", []) as Array<Record<string, string>>)
       .filter((i) => (!i.photo || i.photo.length < 500000) && (!i.videoUrl || i.videoUrl.length < 500000))
       .slice(0, 50);
-    if (small.length) {
+    if (items.length) {
       await supabase.from("mistakes").upsert(
-        small.map((m) => ({
+        items.map((m) => ({
           id: m.id,
           student_name: m.studentName,
           class_name: m.className,
@@ -359,13 +337,13 @@ async function pushAll() {
       );
     }
   }
-  // Attendance
   {
-    const items = safeParse("schoolAttendance", []) as Array<Record<string, string>>;
-    const small = items.filter((i) => !i.photo || i.photo.length < 500000).slice(0, 100);
-    if (small.length) {
+    const items = (safeParse("schoolAttendance", []) as Array<Record<string, string>>)
+      .filter((i) => !i.photo || i.photo.length < 500000)
+      .slice(0, 100);
+    if (items.length) {
       await supabase.from("attendance").upsert(
-        small.map((r) => ({
+        items.map((r) => ({
           id: r.id,
           student_name: r.name,
           roll: r.roll,
@@ -379,7 +357,6 @@ async function pushAll() {
       );
     }
   }
-  // Admissions
   {
     const items = safeParse("schoolAdmissions", []) as Array<Record<string, string>>;
     if (items.length) {
@@ -396,7 +373,6 @@ async function pushAll() {
       );
     }
   }
-  // Notices
   {
     const items = safeParse("schoolNotices", []) as Array<Record<string, string>>;
     if (items.length) {
@@ -422,8 +398,11 @@ export default function CloudSync() {
       if (busy.current || cancelled) return;
       busy.current = true;
       try {
-        await pushAll();
-        if (!cancelled) await pullAll();
+        // Dual write: Supabase + Firebase
+        await Promise.allSettled([supabasePush(), firebasePushAll()]);
+        if (!cancelled) {
+          await Promise.allSettled([supabasePull(), firebasePullAll()]);
+        }
       } catch (e) {
         console.warn("CloudSync", e);
       } finally {
@@ -431,11 +410,8 @@ export default function CloudSync() {
       }
     };
 
-    // First sync soon after load
     const t0 = setTimeout(tick, 1500);
     const interval = setInterval(tick, 8000);
-
-    // Sync when tab becomes visible again
     const onVis = () => {
       if (document.visibilityState === "visible") tick();
     };

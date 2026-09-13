@@ -3,11 +3,14 @@
 import { useEffect, useState } from "react";
 
 export default function DataPersistBanner() {
-  const [mode, setMode] = useState<"checking" | "cloud" | "local">("checking");
+  const [supabaseOk, setSupabaseOk] = useState(false);
+  const [firebaseOk, setFirebaseOk] = useState(false);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // Supabase check
       try {
         const url =
           process.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -18,29 +21,49 @@ export default function DataPersistBanner() {
         const res = await fetch(`${url}/rest/v1/chat_users?select=id&limit=1`, {
           headers: { apikey: key, Authorization: `Bearer ${key}` },
         });
-        if (!cancelled) setMode(res.ok ? "cloud" : "local");
+        if (!cancelled && res.ok) setSupabaseOk(true);
       } catch {
-        if (!cancelled) setMode("local");
+        /* ignore */
       }
+
+      // Firebase configured?
+      const fb =
+        Boolean(process.env.NEXT_PUBLIC_FIREBASE_API_KEY) &&
+        Boolean(process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID);
+      if (!cancelled) setFirebaseOk(fb);
+      if (!cancelled) setReady(true);
     })();
     return () => {
       cancelled = true;
     };
   }, []);
 
-  if (mode === "checking") return null;
+  if (!ready) return null;
 
-  if (mode === "cloud") {
+  if (supabaseOk && firebaseOk) {
     return (
       <div className="bg-green-50 text-green-800 text-[11px] text-center px-3 py-1 border-b border-green-100">
-        ☁️ Supabase cloud ON — messages, groups, location, attendance, festivals sab devices pe sync
+        ☁️ Dual cloud ON — Supabase + Firebase Firestore · data sab devices pe sync
       </div>
     );
   }
-
+  if (supabaseOk) {
+    return (
+      <div className="bg-green-50 text-green-800 text-[11px] text-center px-3 py-1 border-b border-green-100">
+        ☁️ Supabase ON · Firebase ke liye Vercel pe Firebase env vars add karo
+      </div>
+    );
+  }
+  if (firebaseOk) {
+    return (
+      <div className="bg-green-50 text-green-800 text-[11px] text-center px-3 py-1 border-b border-green-100">
+        🔥 Firebase ON · Supabase check karo
+      </div>
+    );
+  }
   return (
     <div className="bg-amber-50 text-amber-800 text-[11px] text-center px-3 py-1 border-b border-amber-100">
-      💾 Local mode — cloud connect check karo
+      💾 Local mode — cloud env vars check karo
     </div>
   );
 }
