@@ -69,9 +69,7 @@ const DEMO_EMAILS = [
 ];
 
 function cleanUsers(list: ChatUser[]): ChatUser[] {
-  return list.filter(
-    (u) => u.email && !DEMO_EMAILS.includes(u.email.toLowerCase())
-  );
+  return list.filter((u) => u.email && !DEMO_EMAILS.includes(u.email.toLowerCase()));
 }
 
 export default function MessagesPage() {
@@ -120,9 +118,14 @@ export default function MessagesPage() {
     }
     setUsers(cleaned);
     setMessages(JSON.parse(localStorage.getItem(MSGS_KEY) || "[]"));
-    setGroups(JSON.parse(localStorage.getItem(GROUPS_KEY) || "[]"));
+    const gList: Group[] = JSON.parse(localStorage.getItem(GROUPS_KEY) || "[]");
+    setGroups(gList);
     setGroupMessages(JSON.parse(localStorage.getItem(GMSGS_KEY) || "[]"));
     setOnlineIds(JSON.parse(localStorage.getItem(ONLINE_KEY) || "[]"));
+    setSelectedGroup((prev) => {
+      if (!prev) return prev;
+      return gList.find((g) => g.id === prev.id) || prev;
+    });
   };
 
   useEffect(() => {
@@ -209,9 +212,7 @@ export default function MessagesPage() {
       ? groupMessages.filter((m) => m.groupId === selectedGroup.id).length
       : 0;
     const prev = selected ? prevMsgCount.current : prevGroupMsgCount.current;
-    if (count > prev && shouldStickBottom.current) {
-      box.scrollTop = box.scrollHeight;
-    }
+    if (count > prev && shouldStickBottom.current) box.scrollTop = box.scrollHeight;
     if (selected) prevMsgCount.current = count;
     else if (selectedGroup) prevGroupMsgCount.current = count;
   }, [messages, groupMessages, selected, selectedGroup, me]);
@@ -221,22 +222,17 @@ export default function MessagesPage() {
     if (selected) prevMsgCount.current = 0;
     if (selectedGroup) prevGroupMsgCount.current = 0;
     requestAnimationFrame(() => {
-      if (chatBoxRef.current) {
-        chatBoxRef.current.scrollTop = chatBoxRef.current.scrollHeight;
-      }
+      if (chatBoxRef.current) chatBoxRef.current.scrollTop = chatBoxRef.current.scrollHeight;
     });
   }, [selected?.id, selectedGroup?.id]);
 
   const onChatScroll = () => {
     const box = chatBoxRef.current;
     if (!box) return;
-    const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
-    shouldStickBottom.current = nearBottom;
+    shouldStickBottom.current = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
   };
 
-  const openInNewTab = () => {
-    window.open("/messages", "_blank", "noopener,noreferrer");
-  };
+  const openInNewTab = () => window.open("/messages", "_blank", "noopener,noreferrer");
 
   const toggleFullscreen = async () => {
     try {
@@ -418,29 +414,85 @@ export default function MessagesPage() {
     if (selectedGroup?.id === gid) setSelectedGroup(null);
   };
 
-  const addToGroup = (userId: string) => {
-    if (!me || !selectedGroup || !selectedGroup.admins.includes(me.id)) return;
-    const updated = groups.map((g) =>
-      g.id === selectedGroup.id && !g.members.includes(userId)
-        ? { ...g, members: [...g.members, userId] }
-        : g
-    );
+  const persistGroups = (updated: Group[]) => {
     setGroups(updated);
     localStorage.setItem(GROUPS_KEY, JSON.stringify(updated));
-    setSelectedGroup(updated.find((g) => g.id === selectedGroup.id)!);
+    if (selectedGroup) {
+      const fresh = updated.find((g) => g.id === selectedGroup.id);
+      if (fresh) setSelectedGroup(fresh);
+    }
+  };
+
+  const addToGroup = (userId: string) => {
+    if (!me || !selectedGroup) return;
+    if (!selectedGroup.admins.includes(me.id)) {
+      alert("Sirf group admin member add kar sakta hai");
+      return;
+    }
+    if (selectedGroup.members.includes(userId)) {
+      alert("Ye member pehle se group me hai");
+      return;
+    }
+    const updated = groups.map((g) =>
+      g.id === selectedGroup.id ? { ...g, members: [...g.members, userId] } : g
+    );
+    persistGroups(updated);
+    setAddMemberQuery("");
+  };
+
+  const addMemberByQuery = () => {
+    if (!me || !selectedGroup) return;
+    if (!selectedGroup.admins.includes(me.id)) {
+      alert("Sirf group admin member add kar sakta hai");
+      return;
+    }
+    const q = addMemberQuery.trim().toLowerCase();
+    if (!q) {
+      alert("Gmail ya username likho");
+      return;
+    }
+
+    let user = users.find(
+      (u) =>
+        u.email.toLowerCase() === q ||
+        u.name.toLowerCase() === q ||
+        u.email.toLowerCase().includes(q) ||
+        u.name.toLowerCase().includes(q)
+    );
+
+    if (!user) {
+      const email = q.includes("@") ? q : q + "@user.local";
+      user = {
+        id: "m_" + email.replace(/[^a-z0-9]/gi, "_"),
+        name: q.includes("@") ? q.split("@")[0] : q,
+        email,
+        role: "Student",
+        createdAt: new Date().toISOString(),
+      };
+      const nextUsers = [...users.filter((u) => u.email.toLowerCase() !== email), user];
+      setUsers(nextUsers);
+      localStorage.setItem(USERS_KEY, JSON.stringify(nextUsers));
+    }
+
+    if (selectedGroup.members.includes(user.id)) {
+      alert("Ye member pehle se group me hai");
+      return;
+    }
+
+    const updated = groups.map((g) =>
+      g.id === selectedGroup.id ? { ...g, members: [...g.members, user!.id] } : g
+    );
+    persistGroups(updated);
     setAddMemberQuery("");
   };
 
   const makeAdmin = (userId: string) => {
     if (!me || !selectedGroup || !selectedGroup.admins.includes(me.id)) return;
+    if (selectedGroup.admins.includes(userId)) return;
     const updated = groups.map((g) =>
-      g.id === selectedGroup.id && !g.admins.includes(userId)
-        ? { ...g, admins: [...g.admins, userId] }
-        : g
+      g.id === selectedGroup.id ? { ...g, admins: [...g.admins, userId] } : g
     );
-    setGroups(updated);
-    localStorage.setItem(GROUPS_KEY, JSON.stringify(updated));
-    setSelectedGroup(updated.find((g) => g.id === selectedGroup.id)!);
+    persistGroups(updated);
   };
 
   const removeMember = (userId: string) => {
@@ -455,9 +507,7 @@ export default function MessagesPage() {
           }
         : g
     );
-    setGroups(updated);
-    localStorage.setItem(GROUPS_KEY, JSON.stringify(updated));
-    setSelectedGroup(updated.find((g) => g.id === selectedGroup.id)!);
+    persistGroups(updated);
   };
 
   const renderMedia = (type: string, url?: string, label?: string) => {
@@ -504,6 +554,7 @@ export default function MessagesPage() {
     ? users.filter(
         (u) =>
           !selectedGroup.members.includes(u.id) &&
+          addMemberQuery.trim() !== "" &&
           (u.name.toLowerCase().includes(addMemberQuery.toLowerCase()) ||
             u.email.toLowerCase().includes(addMemberQuery.toLowerCase()))
       )
@@ -546,9 +597,7 @@ export default function MessagesPage() {
             <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200" /></div>
             <div className="relative flex justify-center text-xs"><span className="bg-white px-2 text-slate-400">OR</span></div>
           </div>
-          <button onClick={() => signIn("google", { callbackUrl: "/messages" })} className="w-full flex items-center justify-center gap-2 border border-slate-200 rounded-lg py-2.5 text-sm font-medium hover:bg-slate-50">
-            Continue with Google Gmail
-          </button>
+          <button onClick={() => signIn("google", { callbackUrl: "/messages" })} className="w-full border border-slate-200 rounded-lg py-2.5 text-sm font-medium hover:bg-slate-50">Continue with Google Gmail</button>
         </div>
       </div>
     );
@@ -570,8 +619,8 @@ export default function MessagesPage() {
               {t === "direct" ? "Chat" : t === "groups" ? "Groups" : `Online (${onlineUsers.length})`}
             </button>
           ))}
-          <button onClick={openInNewTab} className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50">↗ New Tab</button>
-          <button onClick={toggleFullscreen} className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50">{isFullscreen ? "✕ Exit Full" : "⛶ Full Screen"}</button>
+          <button onClick={openInNewTab} className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-white border border-slate-200">↗ New Tab</button>
+          <button onClick={toggleFullscreen} className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-white border border-slate-200">{isFullscreen ? "✕ Exit Full" : "⛶ Full Screen"}</button>
           <button onClick={logout} className="text-[11px] text-red-500 underline ml-1">Logout</button>
         </div>
       </div>
@@ -687,28 +736,55 @@ export default function MessagesPage() {
                   </div>
                 </div>
                 {showMembers && (
-                  <div className="mt-2 p-2 bg-slate-50 rounded-lg text-sm space-y-2 max-h-40 overflow-y-auto">
+                  <div className="mt-2 p-2 bg-slate-50 rounded-lg text-sm space-y-2 max-h-48 overflow-y-auto">
                     {selectedGroup.members.map((mid) => {
                       const u = users.find((x) => x.id === mid);
                       const isAdmin = selectedGroup.admins.includes(mid);
                       return (
-                        <div key={mid} className="flex justify-between items-center">
-                          <span>{u?.name || mid} {isAdmin && <span className="text-[10px] text-purple-600 font-bold">ADMIN</span>}</span>
+                        <div key={mid} className="flex justify-between items-center gap-2">
+                          <span>
+                            {u?.name || mid}{" "}
+                            {isAdmin && <span className="text-[10px] text-purple-600 font-bold">ADMIN</span>}
+                            <span className="text-[10px] text-slate-400 block">{u?.email}</span>
+                          </span>
                           {selectedGroup.admins.includes(me.id) && mid !== me.id && (
-                            <div className="flex gap-1">
-                              {!isAdmin && <button onClick={() => makeAdmin(mid)} className="text-[10px] text-navy-600 underline">Admin</button>}
-                              <button onClick={() => removeMember(mid)} className="text-[10px] text-red-500 underline">Remove</button>
+                            <div className="flex gap-1 shrink-0">
+                              {!isAdmin && (
+                                <button type="button" onClick={() => makeAdmin(mid)} className="text-[10px] text-navy-600 underline">Admin</button>
+                              )}
+                              <button type="button" onClick={() => removeMember(mid)} className="text-[10px] text-red-500 underline">Remove</button>
                             </div>
                           )}
                         </div>
                       );
                     })}
                     {selectedGroup.admins.includes(me.id) && (
-                      <div className="pt-2 border-t">
-                        <input className="input text-xs mb-1" placeholder="Add Gmail / name..." value={addMemberQuery} onChange={(e) => setAddMemberQuery(e.target.value)} />
+                      <div className="pt-2 border-t space-y-1.5">
+                        <div className="flex gap-1">
+                          <input
+                            className="input text-xs flex-1"
+                            placeholder="Gmail / username likho..."
+                            value={addMemberQuery}
+                            onChange={(e) => setAddMemberQuery(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && addMemberByQuery()}
+                          />
+                          <button type="button" onClick={addMemberByQuery} className="btn btn-primary text-xs px-3 shrink-0">
+                            Add
+                          </button>
+                        </div>
                         {addCandidates.slice(0, 5).map((u) => (
-                          <button key={u.id} onClick={() => addToGroup(u.id)} className="block w-full text-left text-xs py-1 hover:bg-white px-2 rounded">+ {u.name}</button>
+                          <button
+                            key={u.id}
+                            type="button"
+                            onClick={() => addToGroup(u.id)}
+                            className="block w-full text-left text-xs py-1.5 hover:bg-white px-2 rounded border border-slate-100"
+                          >
+                            + {u.name} <span className="text-slate-400">({u.email})</span>
+                          </button>
                         ))}
+                        {addMemberQuery.trim() && addCandidates.length === 0 && (
+                          <p className="text-[10px] text-slate-400">Registered nahi — Add dabao, localStorage me save hoga</p>
+                        )}
                       </div>
                     )}
                   </div>
