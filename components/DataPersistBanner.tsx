@@ -10,7 +10,6 @@ export default function DataPersistBanner() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      // Supabase check
       try {
         const url =
           process.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -26,11 +25,8 @@ export default function DataPersistBanner() {
         /* ignore */
       }
 
-      // Firebase configured?
-      const fb =
-        Boolean(process.env.NEXT_PUBLIC_FIREBASE_API_KEY) &&
-        Boolean(process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID);
-      if (!cancelled) setFirebaseOk(fb);
+      // Firebase is hardcoded with umit-jilowa config
+      if (!cancelled) setFirebaseOk(true);
       if (!cancelled) setReady(true);
     })();
     return () => {
@@ -43,27 +39,20 @@ export default function DataPersistBanner() {
   if (supabaseOk && firebaseOk) {
     return (
       <div className="bg-green-50 text-green-800 text-[11px] text-center px-3 py-1 border-b border-green-100">
-        ☁️ Dual cloud ON — Supabase + Firebase Firestore · data sab devices pe sync
+        ☁️ Dual cloud ON — Supabase + Firebase (umit-jilowa) · sab devices pe sync
       </div>
     );
   }
   if (supabaseOk) {
     return (
       <div className="bg-green-50 text-green-800 text-[11px] text-center px-3 py-1 border-b border-green-100">
-        ☁️ Supabase ON · Firebase ke liye Vercel pe Firebase env vars add karo
-      </div>
-    );
-  }
-  if (firebaseOk) {
-    return (
-      <div className="bg-green-50 text-green-800 text-[11px] text-center px-3 py-1 border-b border-green-100">
-        🔥 Firebase ON · Supabase check karo
+        ☁️ Supabase ON · Firebase rules check karo
       </div>
     );
   }
   return (
     <div className="bg-amber-50 text-amber-800 text-[11px] text-center px-3 py-1 border-b border-amber-100">
-      💾 Local mode — cloud env vars check karo
+      💾 Local / cloud connecting…
     </div>
   );
 }
