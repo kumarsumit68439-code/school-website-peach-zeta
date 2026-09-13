@@ -1,17 +1,16 @@
 # Mahatma Gandhi Government English Medium School
 
-School portal for MGGEMS Lalchandpura, Jaipur.
+School portal for **MGGEMS Lalchandpura, Jaipur**.
 
-## Setup
+**Live:** https://school-website-peach-zeta-psi.vercel.app
 
-1. Add environment variables in Vercel:
-   - `GOOGLE_CLIENT_ID`
-   - `GOOGLE_CLIENT_SECRET`
-   - `NEXTAUTH_SECRET`
+## Environment Variables (Vercel)
 
-2. Deploy automatically on push to main.
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `NEXTAUTH_SECRET`
 
-## Local
+## Local Development
 
 ```bash
 npm install
