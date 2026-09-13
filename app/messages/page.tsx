@@ -106,7 +106,10 @@ export default function MessagesPage() {
   const [addMemberQuery, setAddMemberQuery] = useState("");
   const [showMembers, setShowMembers] = useState(false);
 
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const chatBoxRef = useRef<HTMLDivElement>(null);
+  const prevMsgCount = useRef(0);
+  const prevGroupMsgCount = useRef(0);
+  const shouldStickBottom = useRef(true);
 
   const loadAll = () => {
     const raw: ChatUser[] = JSON.parse(localStorage.getItem(USERS_KEY) || "[]");
@@ -133,13 +136,20 @@ export default function MessagesPage() {
     }
   }, []);
 
-  // Real-time sync every 1.5s
+  // Lock body scroll on this page so whole screen doesn't jump
   useEffect(() => {
-    const t = setInterval(loadAll, 1500);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  useEffect(() => {
+    const t = setInterval(loadAll, 2000);
     return () => clearInterval(t);
   }, []);
 
-  // Online heartbeat
   useEffect(() => {
     if (!me) return;
     const beat = () => {
@@ -153,11 +163,10 @@ export default function MessagesPage() {
       setOnlineIds(filtered.map((o) => o.id));
     };
     beat();
-    const t = setInterval(beat, 4000);
+    const t = setInterval(beat, 5000);
     return () => clearInterval(t);
   }, [me]);
 
-  // Google OAuth → auto login/signup chat account
   useEffect(() => {
     if (authStatus !== "authenticated" || !session?.user?.email) return;
     const email = session.user.email.toLowerCase();
@@ -186,9 +195,47 @@ export default function MessagesPage() {
     setShowAuth(false);
   }, [session, authStatus]);
 
+  // Scroll ONLY when new message count increases AND user is near bottom
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, groupMessages, selected, selectedGroup]);
+    if (!chatBoxRef.current) return;
+    const box = chatBoxRef.current;
+    const count = selected
+      ? messages.filter(
+          (m) =>
+            me &&
+            ((m.fromId === me.id && m.toId === selected.id) ||
+              (m.fromId === selected.id && m.toId === me.id))
+        ).length
+      : selectedGroup
+      ? groupMessages.filter((m) => m.groupId === selectedGroup.id).length
+      : 0;
+
+    const prev = selected ? prevMsgCount.current : prevGroupMsgCount.current;
+    if (count > prev && shouldStickBottom.current) {
+      box.scrollTop = box.scrollHeight;
+    }
+    if (selected) prevMsgCount.current = count;
+    else if (selectedGroup) prevGroupMsgCount.current = count;
+  }, [messages, groupMessages, selected, selectedGroup, me]);
+
+  // When opening a chat, jump once to bottom (no smooth — avoids jump loop)
+  useEffect(() => {
+    shouldStickBottom.current = true;
+    if (selected) prevMsgCount.current = 0;
+    if (selectedGroup) prevGroupMsgCount.current = 0;
+    requestAnimationFrame(() => {
+      if (chatBoxRef.current) {
+        chatBoxRef.current.scrollTop = chatBoxRef.current.scrollHeight;
+      }
+    });
+  }, [selected?.id, selectedGroup?.id]);
+
+  const onChatScroll = () => {
+    const box = chatBoxRef.current;
+    if (!box) return;
+    const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+    shouldStickBottom.current = nearBottom;
+  };
 
   const handleSignup = (e: React.FormEvent) => {
     e.preventDefault();
@@ -298,6 +345,7 @@ export default function MessagesPage() {
     setAttachUrl("");
     setAttachFileName("");
     setAttachType("text");
+    shouldStickBottom.current = true;
   };
 
   const sendGroup = () => {
@@ -323,6 +371,7 @@ export default function MessagesPage() {
     setAttachUrl("");
     setAttachFileName("");
     setAttachType("text");
+    shouldStickBottom.current = true;
   };
 
   const createGroup = () => {
@@ -416,7 +465,6 @@ export default function MessagesPage() {
     return null;
   };
 
-  // Only OTHER registered accounts in search (real-time from users state)
   const searchResults = users.filter((u) => {
     if (!me) return false;
     if (u.id === me.id || u.email.toLowerCase() === me.email.toLowerCase()) return false;
@@ -425,7 +473,6 @@ export default function MessagesPage() {
     return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
   });
 
-  // PRIVATE: only messages between me and selected person
   const conversation =
     selected && me
       ? messages
@@ -451,121 +498,76 @@ export default function MessagesPage() {
       )
     : [];
 
-  // ========== AUTH SCREEN ==========
   if (showAuth || !me) {
     return (
-      <div className="max-w-md mx-auto px-4 py-12">
+      <div className="max-w-md mx-auto px-4 py-12 overflow-y-auto" style={{ maxHeight: "calc(100vh - 80px)" }}>
         <div className="card shadow-lg">
           <div className="text-center mb-6">
             <div className="text-4xl mb-2">💬</div>
             <h1 className="text-xl font-bold text-navy-900">School Messenger</h1>
-            <p className="text-sm text-slate-500 mt-1">Pehle account banao / login karo, phir message karo</p>
+            <p className="text-sm text-slate-500 mt-1">Pehle account banao / login karo</p>
           </div>
-
           <div className="flex rounded-lg overflow-hidden border border-slate-200 mb-5">
-            <button
-              onClick={() => { setAuthMode("signup"); setAuthError(""); }}
-              className={`flex-1 py-2.5 text-sm font-semibold ${authMode === "signup" ? "bg-navy-800 text-white" : "bg-white text-slate-600"}`}
-            >
-              Sign Up
-            </button>
-            <button
-              onClick={() => { setAuthMode("login"); setAuthError(""); }}
-              className={`flex-1 py-2.5 text-sm font-semibold ${authMode === "login" ? "bg-navy-800 text-white" : "bg-white text-slate-600"}`}
-            >
-              Login
-            </button>
+            <button onClick={() => { setAuthMode("signup"); setAuthError(""); }} className={`flex-1 py-2.5 text-sm font-semibold ${authMode === "signup" ? "bg-navy-800 text-white" : "bg-white text-slate-600"}`}>Sign Up</button>
+            <button onClick={() => { setAuthMode("login"); setAuthError(""); }} className={`flex-1 py-2.5 text-sm font-semibold ${authMode === "login" ? "bg-navy-800 text-white" : "bg-white text-slate-600"}`}>Login</button>
           </div>
-
-          {authError && (
-            <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2 mb-4">{authError}</div>
-          )}
-
+          {authError && <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2 mb-4">{authError}</div>}
           {authMode === "signup" ? (
             <form onSubmit={handleSignup} className="space-y-3">
-              <div>
-                <label className="label">Full Name *</label>
-                <input className="input" required value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="Rahul Sharma" />
-              </div>
-              <div>
-                <label className="label">Gmail *</label>
-                <input className="input" type="email" required value={formEmail} onChange={(e) => setFormEmail(e.target.value)} placeholder="you@gmail.com" />
-              </div>
-              <div>
-                <label className="label">Password (optional)</label>
-                <input className="input" type="password" value={formPassword} onChange={(e) => setFormPassword(e.target.value)} placeholder="Optional" />
-              </div>
-              <div>
-                <label className="label">Role *</label>
-                <div className="flex gap-2">
-                  {(["Student", "Teacher", "Principal"] as Role[]).map((r) => (
-                    <button key={r} type="button" onClick={() => setFormRole(r)} className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${formRole === r ? "bg-navy-800 text-white border-navy-800" : "bg-white border-slate-200"}`}>{r}</button>
-                  ))}
-                </div>
+              <div><label className="label">Full Name *</label><input className="input" required value={formName} onChange={(e) => setFormName(e.target.value)} /></div>
+              <div><label className="label">Gmail *</label><input className="input" type="email" required value={formEmail} onChange={(e) => setFormEmail(e.target.value)} /></div>
+              <div><label className="label">Password (optional)</label><input className="input" type="password" value={formPassword} onChange={(e) => setFormPassword(e.target.value)} /></div>
+              <div className="flex gap-2">
+                {(["Student", "Teacher", "Principal"] as Role[]).map((r) => (
+                  <button key={r} type="button" onClick={() => setFormRole(r)} className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${formRole === r ? "bg-navy-800 text-white border-navy-800" : "bg-white border-slate-200"}`}>{r}</button>
+                ))}
               </div>
               <button type="submit" className="btn btn-primary w-full py-3">Create Account</button>
             </form>
           ) : (
             <form onSubmit={handleLogin} className="space-y-3">
-              <div>
-                <label className="label">Gmail *</label>
-                <input className="input" type="email" required value={formEmail} onChange={(e) => setFormEmail(e.target.value)} placeholder="you@gmail.com" />
-              </div>
-              <div>
-                <label className="label">Password (agar set kiya tha)</label>
-                <input className="input" type="password" value={formPassword} onChange={(e) => setFormPassword(e.target.value)} />
-              </div>
+              <div><label className="label">Gmail *</label><input className="input" type="email" required value={formEmail} onChange={(e) => setFormEmail(e.target.value)} /></div>
+              <div><label className="label">Password</label><input className="input" type="password" value={formPassword} onChange={(e) => setFormPassword(e.target.value)} /></div>
               <button type="submit" className="btn btn-primary w-full py-3">Login</button>
             </form>
           )}
-
           <div className="relative my-5">
             <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200" /></div>
             <div className="relative flex justify-center text-xs"><span className="bg-white px-2 text-slate-400">OR</span></div>
           </div>
-
-          <button
-            onClick={() => signIn("google", { callbackUrl: "/messages" })}
-            className="w-full flex items-center justify-center gap-2 border border-slate-200 rounded-lg py-2.5 text-sm font-medium hover:bg-slate-50"
-          >
-            <svg className="w-5 h-5" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+          <button onClick={() => signIn("google", { callbackUrl: "/messages" })} className="w-full flex items-center justify-center gap-2 border border-slate-200 rounded-lg py-2.5 text-sm font-medium hover:bg-slate-50">
             Continue with Google Gmail
           </button>
-
-          <p className="text-[11px] text-slate-400 text-center mt-4">
-            Sign up ke baad aapka Gmail search me dikhega. Messages sirf aap aur jis se baat kar rahe ho unko dikhenge.
-          </p>
         </div>
       </div>
     );
   }
 
-  // ========== CHAT UI ==========
   return (
-    <div className="max-w-6xl mx-auto px-4 py-4" style={{ height: "calc(100vh - 100px)" }}>
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+    <div
+      className="max-w-6xl mx-auto px-3 flex flex-col"
+      style={{ height: "calc(100dvh - 64px)", overflow: "hidden" }}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2 py-2 shrink-0">
         <div>
-          <h1 className="text-lg font-bold text-navy-900">💬 Messenger</h1>
-          <p className="text-xs text-slate-500">
-            {me.name} ({me.role}) · {me.email}
-            {onlineIds.includes(me.id) && <span className="text-green-600"> · Online</span>}
-          </p>
+          <h1 className="text-base font-bold text-navy-900">💬 Messenger</h1>
+          <p className="text-[11px] text-slate-500">{me.name} · {me.email}</p>
         </div>
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-1.5 items-center">
           {(["direct", "groups", "online"] as const).map((t) => (
-            <button key={t} onClick={() => { setTab(t); setSelected(null); setSelectedGroup(null); }} className={`px-3 py-1.5 rounded-full text-xs font-semibold capitalize ${tab === t ? "bg-navy-800 text-white" : "bg-white border border-slate-200 text-slate-600"}`}>
+            <button key={t} onClick={() => { setTab(t); setSelected(null); setSelectedGroup(null); }} className={`px-2.5 py-1 rounded-full text-[11px] font-semibold capitalize ${tab === t ? "bg-navy-800 text-white" : "bg-white border border-slate-200 text-slate-600"}`}>
               {t === "direct" ? "Chat" : t === "groups" ? "Groups" : `Online (${onlineUsers.length})`}
             </button>
           ))}
-          <button onClick={logout} className="text-xs text-red-500 underline">Logout</button>
+          <button onClick={logout} className="text-[11px] text-red-500 underline ml-1">Logout</button>
         </div>
       </div>
 
-      <div className="grid md:grid-cols-[280px_1fr] gap-3 h-[calc(100%-48px)]">
-        <div className="card flex flex-col overflow-hidden p-0">
+      <div className="grid md:grid-cols-[260px_1fr] gap-2 flex-1 min-h-0 overflow-hidden">
+        <div className="card flex flex-col overflow-hidden p-0 min-h-0">
           {tab === "online" && (
-            <div className="flex-1 overflow-y-auto">
-              <div className="px-3 py-2 text-[10px] font-bold text-green-700 bg-green-50 uppercase">Online now</div>
+            <div className="flex-1 overflow-y-auto overscroll-contain">
+              <div className="px-3 py-2 text-[10px] font-bold text-green-700 bg-green-50 uppercase sticky top-0">Online</div>
               <div className="px-3 py-2 border-b flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-green-500" />
                 <div><div className="text-sm font-medium">{me.name} (You)</div><div className="text-[10px] text-slate-400">{me.email}</div></div>
@@ -573,49 +575,38 @@ export default function MessagesPage() {
               {onlineUsers.map((u) => (
                 <button key={u.id} onClick={() => { setSelected(u); setTab("direct"); }} className="w-full text-left px-3 py-2.5 border-b hover:bg-slate-50 flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-green-500" />
-                  <div><div className="text-sm font-medium">{u.name}</div><div className="text-[10px] text-slate-400">{u.email} · {u.role}</div></div>
+                  <div><div className="text-sm font-medium">{u.name}</div><div className="text-[10px] text-slate-400">{u.email}</div></div>
                 </button>
               ))}
-              <div className="px-3 py-2 text-[10px] font-bold text-slate-500 bg-slate-50 uppercase mt-2">All registered ({users.length})</div>
+              <div className="px-3 py-2 text-[10px] font-bold text-slate-500 bg-slate-50 uppercase sticky top-0">All ({users.length})</div>
               {users.filter((u) => u.id !== me.id).map((u) => (
                 <button key={u.id} onClick={() => { setSelected(u); setTab("direct"); }} className="w-full text-left px-3 py-2 border-b hover:bg-slate-50">
                   <div className="text-sm font-medium">{u.name}</div>
                   <div className="text-[10px] text-slate-400">{u.email}</div>
                 </button>
               ))}
-              {users.length <= 1 && (
-                <p className="text-xs text-slate-400 text-center py-6 px-3">Sirf aap registered ho. Dusra person Sign Up kare — real-time search me aa jayega.</p>
-              )}
             </div>
           )}
 
           {tab === "direct" && (
             <>
-              <div className="p-2 border-b">
-                <input
-                  className="input text-sm"
-                  placeholder="Search registered Gmail / name..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-                <p className="text-[10px] text-slate-400 mt-1 px-1">Sirf Sign Up / Login wale accounts dikhte hain</p>
+              <div className="p-2 border-b shrink-0">
+                <input className="input text-sm" placeholder="Search Gmail / name..." value={search} onChange={(e) => setSearch(e.target.value)} />
               </div>
-              <div className="flex-1 overflow-y-auto">
+              <div className="flex-1 overflow-y-auto overscroll-contain min-h-0">
                 {searchResults.map((u) => (
                   <button key={u.id} onClick={() => setSelected(u)} className={`w-full text-left px-3 py-2.5 border-b hover:bg-slate-50 ${selected?.id === u.id ? "bg-navy-50" : ""}`}>
                     <div className="flex items-center gap-2">
                       {onlineIds.includes(u.id) && <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />}
                       <div>
                         <div className="text-sm font-medium text-navy-900">{u.name}</div>
-                        <div className="text-[10px] text-slate-400">{u.email} · {u.role}</div>
+                        <div className="text-[10px] text-slate-400">{u.email}</div>
                       </div>
                     </div>
                   </button>
                 ))}
                 {searchResults.length === 0 && (
-                  <p className="text-xs text-slate-400 text-center py-8 px-3">
-                    {search ? `"${search}" se koi registered account nahi` : "Abhi koi aur account nahi. Jab koi Sign Up karega, yahan real-time dikhega."}
-                  </p>
+                  <p className="text-xs text-slate-400 text-center py-8 px-3">Koi registered account nahi</p>
                 )}
               </div>
             </>
@@ -623,11 +614,11 @@ export default function MessagesPage() {
 
           {tab === "groups" && (
             <>
-              <div className="p-2 border-b">
+              <div className="p-2 border-b shrink-0">
                 <button onClick={() => setShowCreateGroup(true)} className="btn btn-primary text-xs w-full">+ Create Group</button>
               </div>
               {showCreateGroup && (
-                <div className="p-3 border-b bg-slate-50 space-y-2">
+                <div className="p-3 border-b bg-slate-50 space-y-2 shrink-0">
                   <input className="input text-sm" placeholder="Group name" value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} />
                   <div className="flex gap-2">
                     <button onClick={createGroup} className="btn btn-primary text-xs flex-1">Create</button>
@@ -635,29 +626,32 @@ export default function MessagesPage() {
                   </div>
                 </div>
               )}
-              <div className="flex-1 overflow-y-auto">
+              <div className="flex-1 overflow-y-auto overscroll-contain min-h-0">
                 {myGroups.map((g) => (
                   <button key={g.id} onClick={() => { setSelectedGroup(g); setShowMembers(false); }} className={`w-full text-left px-3 py-2.5 border-b hover:bg-slate-50 ${selectedGroup?.id === g.id ? "bg-navy-50" : ""}`}>
                     <div className="text-sm font-medium">{g.name}</div>
                     <div className="text-[10px] text-slate-400">{g.members.length} members</div>
                   </button>
                 ))}
-                {myGroups.length === 0 && <p className="text-xs text-slate-400 text-center py-8">No groups</p>}
               </div>
             </>
           )}
         </div>
 
-        <div className="card flex flex-col overflow-hidden p-0">
+        <div className="card flex flex-col overflow-hidden p-0 min-h-0">
           {tab === "direct" && selected && (
             <>
-              <div className="px-4 py-3 border-b">
+              <div className="px-4 py-2.5 border-b shrink-0">
                 <div className="font-semibold text-sm text-navy-900">{selected.name}</div>
-                <div className="text-[10px] text-slate-400">{selected.email} · Private chat (sirf aap dono)</div>
+                <div className="text-[10px] text-slate-400">{selected.email} · Private</div>
               </div>
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              <div
+                ref={chatBoxRef}
+                onScroll={onChatScroll}
+                className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-3 min-h-0"
+              >
                 {conversation.length === 0 && (
-                  <p className="text-center text-slate-400 text-sm py-8">No messages yet. Private — sirf aap aur {selected.name} dekh sakenge.</p>
+                  <p className="text-center text-slate-400 text-sm py-8">No messages yet</p>
                 )}
                 {conversation.map((m) => (
                   <div key={m.id} className={`flex ${m.fromId === me.id ? "justify-end" : "justify-start"}`}>
@@ -668,18 +662,17 @@ export default function MessagesPage() {
                     </div>
                   </div>
                 ))}
-                <div ref={bottomRef} />
               </div>
             </>
           )}
 
           {tab === "groups" && selectedGroup && (
             <>
-              <div className="px-4 py-3 border-b">
+              <div className="px-4 py-2.5 border-b shrink-0">
                 <div className="flex justify-between">
                   <div>
                     <div className="font-semibold text-sm">{selectedGroup.name}</div>
-                    <div className="text-[10px] text-slate-400">{selectedGroup.members.length} members · group chat</div>
+                    <div className="text-[10px] text-slate-400">{selectedGroup.members.length} members</div>
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => setShowMembers(!showMembers)} className="text-xs text-navy-600 underline">Members</button>
@@ -689,16 +682,16 @@ export default function MessagesPage() {
                   </div>
                 </div>
                 {showMembers && (
-                  <div className="mt-3 p-3 bg-slate-50 rounded-lg text-sm space-y-2">
+                  <div className="mt-2 p-2 bg-slate-50 rounded-lg text-sm space-y-2 max-h-40 overflow-y-auto">
                     {selectedGroup.members.map((mid) => {
                       const u = users.find((x) => x.id === mid);
                       const isAdmin = selectedGroup.admins.includes(mid);
                       return (
                         <div key={mid} className="flex justify-between items-center">
-                          <span>{u?.name || mid} {isAdmin && <span className="text-[10px] text-purple-600 font-bold">ADMIN</span>}<span className="text-[10px] text-slate-400 block">{u?.email}</span></span>
+                          <span>{u?.name || mid} {isAdmin && <span className="text-[10px] text-purple-600 font-bold">ADMIN</span>}</span>
                           {selectedGroup.admins.includes(me.id) && mid !== me.id && (
                             <div className="flex gap-1">
-                              {!isAdmin && <button onClick={() => makeAdmin(mid)} className="text-[10px] text-navy-600 underline">Make admin</button>}
+                              {!isAdmin && <button onClick={() => makeAdmin(mid)} className="text-[10px] text-navy-600 underline">Admin</button>}
                               <button onClick={() => removeMember(mid)} className="text-[10px] text-red-500 underline">Remove</button>
                             </div>
                           )}
@@ -707,16 +700,20 @@ export default function MessagesPage() {
                     })}
                     {selectedGroup.admins.includes(me.id) && (
                       <div className="pt-2 border-t">
-                        <input className="input text-xs mb-1" placeholder="Add registered Gmail / name..." value={addMemberQuery} onChange={(e) => setAddMemberQuery(e.target.value)} />
+                        <input className="input text-xs mb-1" placeholder="Add Gmail / name..." value={addMemberQuery} onChange={(e) => setAddMemberQuery(e.target.value)} />
                         {addCandidates.slice(0, 5).map((u) => (
-                          <button key={u.id} onClick={() => addToGroup(u.id)} className="block w-full text-left text-xs py-1 hover:bg-white px-2 rounded">+ {u.name} ({u.email})</button>
+                          <button key={u.id} onClick={() => addToGroup(u.id)} className="block w-full text-left text-xs py-1 hover:bg-white px-2 rounded">+ {u.name}</button>
                         ))}
                       </div>
                     )}
                   </div>
                 )}
               </div>
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              <div
+                ref={chatBoxRef}
+                onScroll={onChatScroll}
+                className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-3 min-h-0"
+              >
                 {gConversation.map((m) => (
                   <div key={m.id} className={`flex ${m.fromId === me.id ? "justify-end" : "justify-start"}`}>
                     <div className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${m.fromId === me.id ? "bg-navy-800 text-white" : "bg-slate-100"}`}>
@@ -727,7 +724,6 @@ export default function MessagesPage() {
                     </div>
                   </div>
                 ))}
-                <div ref={bottomRef} />
               </div>
             </>
           )}
@@ -736,14 +732,13 @@ export default function MessagesPage() {
             <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
               <div className="text-center px-4">
                 <div className="text-4xl mb-2">💬</div>
-                <p>Registered account search karke private chat shuru karo</p>
-                <p className="text-xs mt-2">Messages sirf aap dono ko dikhenge · Real-time update</p>
+                <p>Account select karke chat shuru karo</p>
               </div>
             </div>
           )}
 
           {((tab === "direct" && selected) || (tab === "groups" && selectedGroup)) && (
-            <div className="p-3 border-t space-y-2">
+            <div className="p-2.5 border-t shrink-0 space-y-1.5 bg-white">
               <div className="flex flex-wrap gap-1">
                 {(["text", "link", "photo", "video", "file"] as const).map((t) => (
                   <button key={t} onClick={() => setAttachType(t)} className={`px-2 py-0.5 rounded text-[10px] font-semibold capitalize ${attachType === t ? "bg-navy-800 text-white" : "bg-slate-100 text-slate-600"}`}>{t}</button>
@@ -753,10 +748,9 @@ export default function MessagesPage() {
               {(attachType === "photo" || attachType === "video" || attachType === "file") && (
                 <input type="file" className="input text-xs" accept={attachType === "photo" ? "image/*" : attachType === "video" ? "video/*" : "*/*"} onChange={handleFileAttach} />
               )}
-              {attachFileName && <p className="text-[10px] text-green-600">Attached: {attachFileName}</p>}
               <div className="flex gap-2">
                 <input className="input flex-1" placeholder="Message..." value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (tab === "groups" ? sendGroup() : sendDirect())} />
-                <button onClick={tab === "groups" ? sendGroup : sendDirect} className="btn btn-primary px-5">Send</button>
+                <button onClick={tab === "groups" ? sendGroup : sendDirect} className="btn btn-primary px-4">Send</button>
               </div>
             </div>
           )}
