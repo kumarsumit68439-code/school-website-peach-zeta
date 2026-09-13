@@ -7,7 +7,7 @@ type MediaItem = {
   id: string;
   title: string;
   type: "photo" | "video";
-  url: string; // data URL for photo or video link
+  url: string;
   festival: string;
   uploadedBy: string;
   role: string;
@@ -22,23 +22,28 @@ export default function FestivalsPage() {
   const [playing, setPlaying] = useState<string | null>(null);
 
   useEffect(() => {
-    setItems(JSON.parse(localStorage.getItem(STORAGE) || "[]"));
+    const load = () => setItems(JSON.parse(localStorage.getItem(STORAGE) || "[]"));
+    load();
+    const t = setInterval(load, 3000);
+    return () => clearInterval(t);
   }, []);
 
-  const filtered =
-    filter === "all" ? items : items.filter((i) => i.type === filter);
+  const filtered = filter === "all" ? items : items.filter((i) => i.type === filter);
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-10">
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-2">
         <div>
           <h1 className="text-3xl font-bold text-navy-900">🎉 School Festivals</h1>
-          <p className="text-sm text-slate-500">Photos & videos from school events</p>
+          <p className="text-sm text-slate-500">Photos & videos — visible to everyone</p>
         </div>
         <Link href="/festivals/upload" className="btn btn-primary text-sm">
           + Upload Media
         </Link>
       </div>
+      <p className="text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2 mb-6">
+        ✅ Public gallery — Students, Teachers, Principal, Parents sab dekh / play kar sakte hain. Login zaroori nahi.
+      </p>
 
       <div className="flex gap-2 mb-6">
         {(["all", "photo", "video"] as const).map((f) => (
@@ -58,18 +63,14 @@ export default function FestivalsPage() {
         <div className="card text-center py-16 text-slate-400">
           <div className="text-4xl mb-3">🎊</div>
           <p>No festival media yet.</p>
-          <p className="text-xs mt-1">Teachers / Principal can upload from Upload page.</p>
+          <p className="text-xs mt-1">Koi bhi upload kar sakta hai — phir yahan sabko dikhega.</p>
         </div>
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((item) => (
             <div key={item.id} className="card p-0 overflow-hidden">
               {item.type === "photo" ? (
-                <img
-                  src={item.url}
-                  alt={item.title}
-                  className="w-full aspect-video object-cover"
-                />
+                <img src={item.url} alt={item.title} className="w-full aspect-video object-cover" />
               ) : (
                 <div className="relative aspect-video bg-slate-900">
                   {playing === item.id ? (
@@ -95,12 +96,8 @@ export default function FestivalsPage() {
               )}
               <div className="p-3">
                 <h3 className="font-semibold text-navy-900 text-sm">{item.title}</h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {item.festival} · {item.date}
-                </p>
-                <p className="text-[10px] text-slate-400">
-                  by {item.uploadedBy} ({item.role})
-                </p>
+                <p className="text-xs text-slate-500 mt-0.5">{item.festival} · {item.date}</p>
+                <p className="text-[10px] text-slate-400">by {item.uploadedBy} ({item.role})</p>
               </div>
             </div>
           ))}
