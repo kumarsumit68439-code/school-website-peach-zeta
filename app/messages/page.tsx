@@ -57,6 +57,26 @@ const GROUPS_KEY = "schoolChatGroups";
 const GMSGS_KEY = "schoolChatGroupMessages";
 const ONLINE_KEY = "schoolChatOnline";
 
+/** Old demo accounts — always stripped */
+const DEMO_EMAILS = [
+  "rahul.student@gmail.com",
+  "priya.student@gmail.com",
+  "aman.student@gmail.com",
+  "sneha.student@gmail.com",
+  "sunita.teacher@gmail.com",
+  "ramesh.teacher@gmail.com",
+  "principal.mggems@gmail.com",
+];
+
+function cleanUsers(list: ChatUser[]): ChatUser[] {
+  return list.filter(
+    (u) =>
+      u.email &&
+      !DEMO_EMAILS.includes(u.email.toLowerCase()) &&
+      !u.id.match(/^(u1|u2|u3|u4|t1|t2|p1)$/)
+  );
+}
+
 export default function MessagesPage() {
   const { data: session, status: authStatus } = useSession();
   const [users, setUsers] = useState<ChatUser[]>([]);
@@ -88,7 +108,12 @@ export default function MessagesPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const loadAll = () => {
-    setUsers(JSON.parse(localStorage.getItem(USERS_KEY) || "[]"));
+    const rawUsers: ChatUser[] = JSON.parse(localStorage.getItem(USERS_KEY) || "[]");
+    const cleaned = cleanUsers(rawUsers);
+    if (cleaned.length !== rawUsers.length) {
+      localStorage.setItem(USERS_KEY, JSON.stringify(cleaned));
+    }
+    setUsers(cleaned);
     setMessages(JSON.parse(localStorage.getItem(MSGS_KEY) || "[]"));
     setGroups(JSON.parse(localStorage.getItem(GROUPS_KEY) || "[]"));
     setGroupMessages(JSON.parse(localStorage.getItem(GMSGS_KEY) || "[]"));
@@ -98,14 +123,19 @@ export default function MessagesPage() {
   useEffect(() => {
     loadAll();
     const savedMe = JSON.parse(localStorage.getItem(ME_KEY) || "null");
-    if (savedMe) setMe(savedMe);
+    if (savedMe && !DEMO_EMAILS.includes((savedMe.email || "").toLowerCase())) {
+      setMe(savedMe);
+    } else if (savedMe) {
+      localStorage.removeItem(ME_KEY);
+    }
   }, []);
 
-  // Heartbeat: mark me online
   useEffect(() => {
     if (!me) return;
     const beat = () => {
-      const online: { id: string; at: number }[] = JSON.parse(localStorage.getItem(ONLINE_KEY + "_raw") || "[]");
+      const online: { id: string; at: number }[] = JSON.parse(
+        localStorage.getItem(ONLINE_KEY + "_raw") || "[]"
+      );
       const filtered = online.filter((o) => Date.now() - o.at < 15000 && o.id !== me.id);
       filtered.push({ id: me.id, at: Date.now() });
       localStorage.setItem(ONLINE_KEY + "_raw", JSON.stringify(filtered));
@@ -117,13 +147,11 @@ export default function MessagesPage() {
     return () => clearInterval(t);
   }, [me]);
 
-  // Real-time poll
   useEffect(() => {
     const t = setInterval(loadAll, 2000);
     return () => clearInterval(t);
   }, []);
 
-  // Google session → register
   useEffect(() => {
     if (authStatus !== "authenticated" || !session?.user?.email) return;
     const email = session.user.email.toLowerCase();
@@ -132,8 +160,17 @@ export default function MessagesPage() {
       const existing = prev.find((u) => u.email.toLowerCase() === email);
       const user: ChatUser = existing
         ? { ...existing, name, lastSeen: Date.now() }
-        : { id: "g_" + email.replace(/[^a-z0-9]/gi, "_"), name, email, role: "Student", lastSeen: Date.now() };
-      const updated = [...prev.filter((u) => u.email.toLowerCase() !== email), user];
+        : {
+            id: "g_" + email.replace(/[^a-z0-9]/gi, "_"),
+            name,
+            email,
+            role: "Student",
+            lastSeen: Date.now(),
+          };
+      const updated = cleanUsers([
+        ...prev.filter((u) => u.email.toLowerCase() !== email),
+        user,
+      ]);
       localStorage.setItem(USERS_KEY, JSON.stringify(updated));
       const savedMe = JSON.parse(localStorage.getItem(ME_KEY) || "null");
       if (!savedMe || savedMe.email?.toLowerCase() === email) {
@@ -147,7 +184,8 @@ export default function MessagesPage() {
 
   useEffect(() => {
     if (authStatus === "loading") return;
-    if (!JSON.parse(localStorage.getItem(ME_KEY) || "null") && !session?.user) setShowSetup(true);
+    const savedMe = JSON.parse(localStorage.getItem(ME_KEY) || "null");
+    if (!savedMe && !session?.user) setShowSetup(true);
   }, [authStatus, session]);
 
   useEffect(() => {
@@ -156,7 +194,10 @@ export default function MessagesPage() {
 
   const registerUser = (user: ChatUser) => {
     setUsers((prev) => {
-      const updated = [...prev.filter((u) => u.email.toLowerCase() !== user.email.toLowerCase()), user];
+      const updated = cleanUsers([
+        ...prev.filter((u) => u.email.toLowerCase() !== user.email.toLowerCase()),
+        user,
+      ]);
       localStorage.setItem(USERS_KEY, JSON.stringify(updated));
       return updated;
     });
@@ -168,6 +209,10 @@ export default function MessagesPage() {
   const saveMe = () => {
     if (!setupName.trim() || !setupEmail.trim()) return;
     const email = setupEmail.trim().toLowerCase();
+    if (DEMO_EMAILS.includes(email)) {
+      alert("This email is blocked (old demo). Use your real Gmail.");
+      return;
+    }
     const existing = users.find((u) => u.email.toLowerCase() === email);
     registerUser(
       existing
@@ -184,8 +229,39 @@ export default function MessagesPage() {
     registerUser(
       existing
         ? { ...existing, name, role: setupRole }
-        : { id: "g_" + email.replace(/[^a-z0-9]/gi, "_"), name, email, role: setupRole }
+        : {
+            id: "g_" + email.replace(/[^a-z0-9]/gi, "_"),
+            name,
+            email,
+            role: setupRole,
+          }
     );
+  };
+
+  /** Start chat with any Gmail — creates account entry if not exists */
+  const startChatByEmail = () => {
+    const q = search.trim().toLowerCase();
+    if (!q || !me) return;
+    const existing = users.find(
+      (u) => u.email.toLowerCase() === q || u.name.toLowerCase() === q
+    );
+    if (existing) {
+      setSelected(existing);
+      setSearch("");
+      return;
+    }
+    // Create placeholder contact so you can message this Gmail/username
+    const contact: ChatUser = {
+      id: "c_" + q.replace(/[^a-z0-9]/gi, "_"),
+      name: q.includes("@") ? q.split("@")[0] : q,
+      email: q.includes("@") ? q : q + "@user.local",
+      role: "Student",
+    };
+    const updated = cleanUsers([...users, contact]);
+    setUsers(updated);
+    localStorage.setItem(USERS_KEY, JSON.stringify(updated));
+    setSelected(contact);
+    setSearch("");
   };
 
   const handleFileAttach = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -232,7 +308,6 @@ export default function MessagesPage() {
   const sendGroup = () => {
     if (!me || !selectedGroup) return;
     if (attachType === "text" && !text.trim()) return;
-
     const msg: GroupMessage = {
       id: Date.now().toString(),
       groupId: selectedGroup.id,
@@ -281,10 +356,9 @@ export default function MessagesPage() {
       alert("Only group admin can delete");
       return;
     }
-    if (!confirm("Delete this group and all messages?")) return;
-    const updated = groups.filter((x) => x.id !== gid);
-    setGroups(updated);
-    localStorage.setItem(GROUPS_KEY, JSON.stringify(updated));
+    if (!confirm("Delete this group?")) return;
+    setGroups(groups.filter((x) => x.id !== gid));
+    localStorage.setItem(GROUPS_KEY, JSON.stringify(groups.filter((x) => x.id !== gid)));
     const msgs = groupMessages.filter((m) => m.groupId !== gid);
     setGroupMessages(msgs);
     localStorage.setItem(GMSGS_KEY, JSON.stringify(msgs));
@@ -292,28 +366,19 @@ export default function MessagesPage() {
   };
 
   const addToGroup = (userId: string) => {
-    if (!me || !selectedGroup) return;
-    if (!selectedGroup.admins.includes(me.id)) {
-      alert("Only admin can add members");
-      return;
-    }
+    if (!me || !selectedGroup || !selectedGroup.admins.includes(me.id)) return;
     if (selectedGroup.members.includes(userId)) return;
     const updated = groups.map((g) =>
       g.id === selectedGroup.id ? { ...g, members: [...g.members, userId] } : g
     );
     setGroups(updated);
     localStorage.setItem(GROUPS_KEY, JSON.stringify(updated));
-    const fresh = updated.find((g) => g.id === selectedGroup.id)!;
-    setSelectedGroup(fresh);
+    setSelectedGroup(updated.find((g) => g.id === selectedGroup.id)!);
     setAddMemberQuery("");
   };
 
   const makeAdmin = (userId: string) => {
-    if (!me || !selectedGroup) return;
-    if (!selectedGroup.admins.includes(me.id)) {
-      alert("Only admin can promote");
-      return;
-    }
+    if (!me || !selectedGroup || !selectedGroup.admins.includes(me.id)) return;
     if (selectedGroup.admins.includes(userId)) return;
     const updated = groups.map((g) =>
       g.id === selectedGroup.id ? { ...g, admins: [...g.admins, userId] } : g
@@ -324,12 +389,8 @@ export default function MessagesPage() {
   };
 
   const removeMember = (userId: string) => {
-    if (!me || !selectedGroup) return;
-    if (!selectedGroup.admins.includes(me.id)) return;
-    if (userId === selectedGroup.createdBy) {
-      alert("Cannot remove group creator");
-      return;
-    }
+    if (!me || !selectedGroup || !selectedGroup.admins.includes(me.id)) return;
+    if (userId === selectedGroup.createdBy) return;
     const updated = groups.map((g) =>
       g.id === selectedGroup.id
         ? {
@@ -346,28 +407,17 @@ export default function MessagesPage() {
 
   const renderMedia = (type: string, url?: string, label?: string) => {
     if (!url) return null;
-    if (type === "photo")
-      return <img src={url} alt="" className="max-h-40 rounded-lg mt-1 border" />;
+    if (type === "photo") return <img src={url} alt="" className="max-h-40 rounded-lg mt-1 border" />;
     if (type === "video")
       return url.includes("youtube") || url.includes("youtu.be") ? (
-        <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs underline block mt-1">
-          🎬 Open video
-        </a>
+        <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs underline block mt-1">🎬 Open video</a>
       ) : (
         <video src={url} controls className="max-h-40 rounded-lg mt-1 w-full" />
       );
     if (type === "link")
-      return (
-        <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs underline break-all block mt-1">
-          🔗 {url}
-        </a>
-      );
+      return <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs underline break-all block mt-1">🔗 {url}</a>;
     if (type === "file")
-      return (
-        <a href={url} download={label} className="text-xs underline block mt-1">
-          📎 {label || "Download file"}
-        </a>
-      );
+      return <a href={url} download={label} className="text-xs underline block mt-1">📎 {label || "Download"}</a>;
     return null;
   };
 
@@ -394,9 +444,7 @@ export default function MessagesPage() {
       : [];
 
   const gConversation = selectedGroup
-    ? groupMessages
-        .filter((m) => m.groupId === selectedGroup.id)
-        .sort((a, b) => a.timestamp - b.timestamp)
+    ? groupMessages.filter((m) => m.groupId === selectedGroup.id).sort((a, b) => a.timestamp - b.timestamp)
     : [];
 
   const addCandidates = selectedGroup
@@ -414,10 +462,12 @@ export default function MessagesPage() {
         <div className="card shadow-lg text-center">
           <div className="text-4xl mb-3">💬</div>
           <h1 className="text-xl font-bold text-navy-900 mb-1">School Messenger</h1>
-          <p className="text-sm text-slate-500 mb-6">Register to chat, join groups & see online users</p>
+          <p className="text-sm text-slate-500 mb-6">
+            Apna <strong>Gmail / username</strong> daalo — account ban jayega aur dusre aapko search karke message kar sakenge
+          </p>
           {session?.user && (
             <div className="mb-5 p-3 rounded-lg bg-navy-50 border border-navy-100 text-left">
-              <p className="text-xs text-navy-600 mb-1">Google:</p>
+              <p className="text-xs text-navy-600 mb-1">Google account:</p>
               <p className="text-sm font-semibold">{session.user.name}</p>
               <p className="text-xs text-slate-500 mb-3">{session.user.email}</p>
               <div className="flex gap-2 mb-2">
@@ -429,15 +479,16 @@ export default function MessagesPage() {
             </div>
           )}
           <div className="space-y-3 text-left">
-            <div><label className="label">Name *</label><input className="input" value={setupName} onChange={(e) => setSetupName(e.target.value)} /></div>
-            <div><label className="label">Gmail *</label><input className="input" value={setupEmail} onChange={(e) => setSetupEmail(e.target.value)} /></div>
+            <div><label className="label">Name *</label><input className="input" value={setupName} onChange={(e) => setSetupName(e.target.value)} placeholder="Your full name" /></div>
+            <div><label className="label">Gmail / Username *</label><input className="input" value={setupEmail} onChange={(e) => setSetupEmail(e.target.value)} placeholder="you@gmail.com" /></div>
             <div className="flex gap-2">
               {(["Student", "Teacher", "Principal"] as Role[]).map((r) => (
                 <button key={r} type="button" onClick={() => setSetupRole(r)} className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${setupRole === r ? "bg-navy-800 text-white border-navy-800" : "bg-white border-slate-200"}`}>{r}</button>
               ))}
             </div>
-            <button onClick={saveMe} className="btn btn-primary w-full">Continue</button>
+            <button onClick={saveMe} className="btn btn-primary w-full">Create Account & Continue</button>
           </div>
+          <p className="text-xs text-slate-400 mt-4">Koi demo account nahi — sirf real Gmail / username.</p>
         </div>
       </div>
     );
@@ -452,13 +503,7 @@ export default function MessagesPage() {
         </div>
         <div className="flex gap-2">
           {(["direct", "groups", "online"] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => { setTab(t); setSelected(null); setSelectedGroup(null); }}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold capitalize ${
-                tab === t ? "bg-navy-800 text-white" : "bg-white border border-slate-200 text-slate-600"
-              }`}
-            >
+            <button key={t} onClick={() => { setTab(t); setSelected(null); setSelectedGroup(null); }} className={`px-3 py-1.5 rounded-full text-xs font-semibold capitalize ${tab === t ? "bg-navy-800 text-white" : "bg-white border border-slate-200 text-slate-600"}`}>
               {t === "direct" ? "Chat" : t === "groups" ? "Groups" : `Online (${onlineUsers.length})`}
             </button>
           ))}
@@ -467,64 +512,44 @@ export default function MessagesPage() {
       </div>
 
       <div className="grid md:grid-cols-[280px_1fr] gap-3 h-[calc(100%-48px)]">
-        {/* LEFT PANEL */}
         <div className="card flex flex-col overflow-hidden p-0">
           {tab === "online" && (
             <div className="flex-1 overflow-y-auto">
-              <div className="px-3 py-2 text-[10px] font-bold text-green-700 bg-green-50 uppercase">
-                Online now ({onlineUsers.length + 1} including you)
-              </div>
-              <div className="px-3 py-2 border-b border-slate-50 flex items-center gap-2">
+              <div className="px-3 py-2 text-[10px] font-bold text-green-700 bg-green-50 uppercase">Online ({onlineUsers.length + 1})</div>
+              <div className="px-3 py-2 border-b flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-green-500" />
-                <div>
-                  <div className="text-sm font-medium">{me.name} (You)</div>
-                  <div className="text-[10px] text-slate-400">{me.email}</div>
-                </div>
+                <div><div className="text-sm font-medium">{me.name} (You)</div><div className="text-[10px] text-slate-400">{me.email}</div></div>
               </div>
               {onlineUsers.map((u) => (
-                <button
-                  key={u.id}
-                  onClick={() => { setSelected(u); setTab("direct"); }}
-                  className="w-full text-left px-3 py-2.5 border-b border-slate-50 hover:bg-slate-50 flex items-center gap-2"
-                >
+                <button key={u.id} onClick={() => { setSelected(u); setTab("direct"); }} className="w-full text-left px-3 py-2.5 border-b hover:bg-slate-50 flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-green-500" />
-                  <div>
-                    <div className="text-sm font-medium text-navy-900">{u.name}</div>
-                    <div className="text-[10px] text-slate-400">{u.email} · {u.role}</div>
-                  </div>
+                  <div><div className="text-sm font-medium">{u.name}</div><div className="text-[10px] text-slate-400">{u.email}</div></div>
                 </button>
               ))}
-              {onlineUsers.length === 0 && (
-                <p className="text-xs text-slate-400 text-center py-6">Only you are online right now</p>
-              )}
-              <div className="px-3 py-2 text-[10px] font-bold text-slate-500 bg-slate-50 uppercase mt-2">
-                All registered ({users.length})
-              </div>
+              <div className="px-3 py-2 text-[10px] font-bold text-slate-500 bg-slate-50 uppercase mt-2">All accounts ({users.length})</div>
               {users.filter((u) => u.id !== me.id).map((u) => (
-                <button
-                  key={u.id}
-                  onClick={() => { setSelected(u); setTab("direct"); }}
-                  className="w-full text-left px-3 py-2 border-b border-slate-50 hover:bg-slate-50"
-                >
+                <button key={u.id} onClick={() => { setSelected(u); setTab("direct"); }} className="w-full text-left px-3 py-2 border-b hover:bg-slate-50">
                   <div className="text-sm font-medium">{u.name}</div>
                   <div className="text-[10px] text-slate-400">{u.email}</div>
                 </button>
               ))}
+              {users.length <= 1 && <p className="text-xs text-slate-400 text-center py-6 px-3">Abhi sirf aap ho. Dusra person apna Gmail daal ke account banaye — phir yahan dikhega.</p>}
             </div>
           )}
 
           {tab === "direct" && (
             <>
-              <div className="p-2 border-b">
-                <input className="input text-sm" placeholder="Search Gmail / name..." value={search} onChange={(e) => setSearch(e.target.value)} />
+              <div className="p-2 border-b space-y-2">
+                <input className="input text-sm" placeholder="Gmail ya username likho..." value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && startChatByEmail()} />
+                {search.trim() && (
+                  <button onClick={startChatByEmail} className="btn btn-primary w-full text-xs py-2">
+                    Chat start: {search.trim()}
+                  </button>
+                )}
               </div>
               <div className="flex-1 overflow-y-auto">
                 {filteredUsers.map((u) => (
-                  <button
-                    key={u.id}
-                    onClick={() => setSelected(u)}
-                    className={`w-full text-left px-3 py-2.5 border-b border-slate-50 hover:bg-slate-50 ${selected?.id === u.id ? "bg-navy-50" : ""}`}
-                  >
+                  <button key={u.id} onClick={() => setSelected(u)} className={`w-full text-left px-3 py-2.5 border-b hover:bg-slate-50 ${selected?.id === u.id ? "bg-navy-50" : ""}`}>
                     <div className="flex items-center gap-2">
                       {onlineIds.includes(u.id) && <span className="w-2 h-2 rounded-full bg-green-500" />}
                       <div>
@@ -534,8 +559,10 @@ export default function MessagesPage() {
                     </div>
                   </button>
                 ))}
-                {filteredUsers.length === 0 && (
-                  <p className="text-xs text-slate-400 text-center py-8">No users yet. Others must register / Google login.</p>
+                {users.filter((u) => u.id !== me.id).length === 0 && !search && (
+                  <p className="text-xs text-slate-400 text-center py-8 px-3">
+                    Koi account nahi. Upar Gmail/username likho aur &quot;Chat start&quot; dabao — ya dusra user register kare.
+                  </p>
                 )}
               </div>
             </>
@@ -543,8 +570,8 @@ export default function MessagesPage() {
 
           {tab === "groups" && (
             <>
-              <div className="p-2 border-b flex gap-2">
-                <button onClick={() => setShowCreateGroup(true)} className="btn btn-primary text-xs flex-1">+ Create Group</button>
+              <div className="p-2 border-b">
+                <button onClick={() => setShowCreateGroup(true)} className="btn btn-primary text-xs w-full">+ Create Group</button>
               </div>
               {showCreateGroup && (
                 <div className="p-3 border-b bg-slate-50 space-y-2">
@@ -557,34 +584,23 @@ export default function MessagesPage() {
               )}
               <div className="flex-1 overflow-y-auto">
                 {myGroups.map((g) => (
-                  <button
-                    key={g.id}
-                    onClick={() => { setSelectedGroup(g); setShowMembers(false); }}
-                    className={`w-full text-left px-3 py-2.5 border-b border-slate-50 hover:bg-slate-50 ${selectedGroup?.id === g.id ? "bg-navy-50" : ""}`}
-                  >
-                    <div className="text-sm font-medium text-navy-900">{g.name}</div>
-                    <div className="text-[10px] text-slate-400">{g.members.length} members · {g.admins.includes(me.id) ? "Admin" : "Member"}</div>
+                  <button key={g.id} onClick={() => { setSelectedGroup(g); setShowMembers(false); }} className={`w-full text-left px-3 py-2.5 border-b hover:bg-slate-50 ${selectedGroup?.id === g.id ? "bg-navy-50" : ""}`}>
+                    <div className="text-sm font-medium">{g.name}</div>
+                    <div className="text-[10px] text-slate-400">{g.members.length} members</div>
                   </button>
                 ))}
-                {myGroups.length === 0 && (
-                  <p className="text-xs text-slate-400 text-center py-8">No groups. Create one!</p>
-                )}
+                {myGroups.length === 0 && <p className="text-xs text-slate-400 text-center py-8">No groups yet</p>}
               </div>
             </>
           )}
         </div>
 
-        {/* RIGHT PANEL */}
         <div className="card flex flex-col overflow-hidden p-0">
-          {/* DIRECT CHAT */}
           {tab === "direct" && selected && (
             <>
-              <div className="px-4 py-3 border-b flex items-center gap-2">
-                {onlineIds.includes(selected.id) && <span className="w-2 h-2 rounded-full bg-green-500" />}
-                <div>
-                  <div className="font-semibold text-sm text-navy-900">{selected.name}</div>
-                  <div className="text-[10px] text-slate-400">{selected.email}</div>
-                </div>
+              <div className="px-4 py-3 border-b">
+                <div className="font-semibold text-sm">{selected.name}</div>
+                <div className="text-[10px] text-slate-400">{selected.email}</div>
               </div>
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
                 {conversation.map((m) => (
@@ -601,43 +617,32 @@ export default function MessagesPage() {
             </>
           )}
 
-          {/* GROUP CHAT */}
           {tab === "groups" && selectedGroup && (
             <>
               <div className="px-4 py-3 border-b">
-                <div className="flex items-center justify-between">
+                <div className="flex justify-between">
                   <div>
-                    <div className="font-semibold text-sm text-navy-900">{selectedGroup.name}</div>
+                    <div className="font-semibold text-sm">{selectedGroup.name}</div>
                     <div className="text-[10px] text-slate-400">{selectedGroup.members.length} members</div>
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={() => setShowMembers(!showMembers)} className="text-xs text-navy-600 underline">
-                      Members
-                    </button>
+                    <button onClick={() => setShowMembers(!showMembers)} className="text-xs text-navy-600 underline">Members</button>
                     {selectedGroup.admins.includes(me.id) && (
-                      <button onClick={() => deleteGroup(selectedGroup.id)} className="text-xs text-red-500 underline">
-                        Delete
-                      </button>
+                      <button onClick={() => deleteGroup(selectedGroup.id)} className="text-xs text-red-500 underline">Delete</button>
                     )}
                   </div>
                 </div>
                 {showMembers && (
                   <div className="mt-3 p-3 bg-slate-50 rounded-lg text-sm space-y-2">
-                    <p className="text-xs font-bold text-slate-500 uppercase">Members ({selectedGroup.members.length})</p>
                     {selectedGroup.members.map((mid) => {
                       const u = users.find((x) => x.id === mid);
                       const isAdmin = selectedGroup.admins.includes(mid);
                       return (
-                        <div key={mid} className="flex items-center justify-between">
-                          <span>
-                            {u?.name || mid} {isAdmin && <span className="text-[10px] text-purple-600 font-bold">ADMIN</span>}
-                            <span className="text-[10px] text-slate-400 block">{u?.email}</span>
-                          </span>
+                        <div key={mid} className="flex justify-between items-center">
+                          <span>{u?.name || mid} {isAdmin && <span className="text-[10px] text-purple-600 font-bold">ADMIN</span>}<span className="text-[10px] text-slate-400 block">{u?.email}</span></span>
                           {selectedGroup.admins.includes(me.id) && mid !== me.id && (
                             <div className="flex gap-1">
-                              {!isAdmin && (
-                                <button onClick={() => makeAdmin(mid)} className="text-[10px] text-navy-600 underline">Make admin</button>
-                              )}
+                              {!isAdmin && <button onClick={() => makeAdmin(mid)} className="text-[10px] text-navy-600 underline">Make admin</button>}
                               <button onClick={() => removeMember(mid)} className="text-[10px] text-red-500 underline">Remove</button>
                             </div>
                           )}
@@ -646,16 +651,9 @@ export default function MessagesPage() {
                     })}
                     {selectedGroup.admins.includes(me.id) && (
                       <div className="pt-2 border-t">
-                        <input
-                          className="input text-xs mb-1"
-                          placeholder="Add by Gmail / name..."
-                          value={addMemberQuery}
-                          onChange={(e) => setAddMemberQuery(e.target.value)}
-                        />
-                        {addMemberQuery && addCandidates.slice(0, 5).map((u) => (
-                          <button key={u.id} onClick={() => addToGroup(u.id)} className="block w-full text-left text-xs py-1 hover:bg-white px-2 rounded">
-                            + {u.name} ({u.email})
-                          </button>
+                        <input className="input text-xs mb-1" placeholder="Add by Gmail / name..." value={addMemberQuery} onChange={(e) => setAddMemberQuery(e.target.value)} />
+                        {addCandidates.slice(0, 5).map((u) => (
+                          <button key={u.id} onClick={() => addToGroup(u.id)} className="block w-full text-left text-xs py-1 hover:bg-white px-2 rounded">+ {u.name} ({u.email})</button>
                         ))}
                       </div>
                     )}
@@ -680,42 +678,28 @@ export default function MessagesPage() {
 
           {((tab === "direct" && !selected) || (tab === "groups" && !selectedGroup) || tab === "online") && (
             <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
-              <div className="text-center">
+              <div className="text-center px-4">
                 <div className="text-4xl mb-2">💬</div>
-                <p>{tab === "online" ? "Select a user to chat" : tab === "groups" ? "Select or create a group" : "Search & select a person"}</p>
+                <p>Gmail / username likho aur chat start karo</p>
+                <p className="text-xs mt-2">Demo accounts hata diye — sirf real accounts</p>
               </div>
             </div>
           )}
 
-          {/* INPUT BAR */}
           {((tab === "direct" && selected) || (tab === "groups" && selectedGroup)) && (
             <div className="p-3 border-t space-y-2">
               <div className="flex flex-wrap gap-1">
                 {(["text", "link", "photo", "video", "file"] as const).map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setAttachType(t)}
-                    className={`px-2 py-0.5 rounded text-[10px] font-semibold capitalize ${attachType === t ? "bg-navy-800 text-white" : "bg-slate-100 text-slate-600"}`}
-                  >
-                    {t}
-                  </button>
+                  <button key={t} onClick={() => setAttachType(t)} className={`px-2 py-0.5 rounded text-[10px] font-semibold capitalize ${attachType === t ? "bg-navy-800 text-white" : "bg-slate-100 text-slate-600"}`}>{t}</button>
                 ))}
               </div>
-              {attachType === "link" && (
-                <input className="input text-xs" placeholder="Paste link URL..." value={attachUrl} onChange={(e) => setAttachUrl(e.target.value)} />
-              )}
+              {attachType === "link" && <input className="input text-xs" placeholder="Paste link..." value={attachUrl} onChange={(e) => setAttachUrl(e.target.value)} />}
               {(attachType === "photo" || attachType === "video" || attachType === "file") && (
                 <input type="file" className="input text-xs" accept={attachType === "photo" ? "image/*" : attachType === "video" ? "video/*" : "*/*"} onChange={handleFileAttach} />
               )}
               {attachFileName && <p className="text-[10px] text-green-600">Attached: {attachFileName}</p>}
               <div className="flex gap-2">
-                <input
-                  className="input flex-1"
-                  placeholder={attachType === "text" ? "Type message..." : "Caption (optional)..."}
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && (tab === "groups" ? sendGroup() : sendDirect())}
-                />
+                <input className="input flex-1" placeholder="Message..." value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (tab === "groups" ? sendGroup() : sendDirect())} />
                 <button onClick={tab === "groups" ? sendGroup : sendDirect} className="btn btn-primary px-5">Send</button>
               </div>
             </div>
