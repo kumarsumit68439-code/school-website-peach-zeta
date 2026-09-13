@@ -13,6 +13,7 @@ const links = [
   { href: "/attendance", label: "Attendance" },
   { href: "/festivals", label: "Festivals" },
   { href: "/mistakes", label: "Mistakes" },
+  { href: "/location", label: "Location" },
   { href: "/gallery", label: "Gallery" },
   { href: "/result", label: "Results" },
   { href: "/messages", label: "Messages" },
