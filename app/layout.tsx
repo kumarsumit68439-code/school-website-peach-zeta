@@ -5,6 +5,7 @@ import { Providers } from "@/components/Providers";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import DataPersistBanner from "@/components/DataPersistBanner";
+import StudentGate from "@/components/StudentGate";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -25,7 +26,9 @@ export default function RootLayout({
         <Providers>
           <Navbar />
           <DataPersistBanner />
-          <main className="flex-1">{children}</main>
+          <main className="flex-1">
+            <StudentGate>{children}</StudentGate>
+          </main>
           <Footer />
         </Providers>
       </body>
