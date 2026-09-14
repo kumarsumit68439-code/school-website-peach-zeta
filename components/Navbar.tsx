@@ -19,6 +19,7 @@ const links = [
   { href: "/result", label: "Results" },
   { href: "/messages", label: "Messages" },
   { href: "/api-keys", label: "API Keys" },
+  { href: "/api-client", label: "API Client" },
   { href: "/api-docs", label: "API Docs" },
   { href: "/contact", label: "Contact" },
 ];
