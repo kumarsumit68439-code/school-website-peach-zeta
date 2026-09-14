@@ -10,6 +10,7 @@ const PUBLIC = [
   "/login",
   "/api-docs",
   "/api-keys",
+  "/api-client",
 ];
 
 export default function StudentGate({ children }: { children: React.ReactNode }) {
@@ -19,7 +20,6 @@ export default function StudentGate({ children }: { children: React.ReactNode })
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    // API routes not handled here (server)
     if (pathname?.startsWith("/api")) {
       setOk(true);
       setChecking(false);
@@ -28,7 +28,6 @@ export default function StudentGate({ children }: { children: React.ReactNode })
     const isPublic = PUBLIC.some(
       (p) => pathname === p || pathname?.startsWith(p + "/")
     );
-    // Staff login & teacher area allowed without student session
     if (isPublic || pathname?.startsWith("/teacher") || pathname?.startsWith("/login")) {
       setOk(true);
       setChecking(false);
