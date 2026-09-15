@@ -19,13 +19,11 @@ function StudentLoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  // Already have student local session
   useEffect(() => {
     const me = getStudentMe();
     if (me?.email) router.replace(next);
   }, [next, router]);
 
-  // Google OAuth success → set student session (keep email/password flow intact)
   useEffect(() => {
     if (status !== "authenticated" || !session?.user?.email) return;
     const already = getStudentMe();
@@ -43,7 +41,6 @@ function StudentLoginForm() {
       role: "Student",
     };
 
-    // Save to chat users list
     try {
       const list = JSON.parse(localStorage.getItem("schoolChatUsers") || "[]");
       if (!list.find((u: { email: string }) => u.email?.toLowerCase() === em)) {
@@ -57,18 +54,19 @@ function StudentLoginForm() {
     setStudentMe(user);
     localStorage.setItem("schoolChatMe", JSON.stringify(user));
 
-    // Cloud upsert (non-blocking)
-    supabase
-      .from("chat_users")
-      .upsert({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: "Student",
-        password: null,
-      })
-      .then(() => {})
-      .catch(() => {});
+    void (async () => {
+      try {
+        await supabase.from("chat_users").upsert({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: "Student",
+          password: null,
+        });
+      } catch {
+        /* ignore */
+      }
+    })();
 
     router.replace(next);
   }, [session, status, next, router]);
@@ -157,8 +155,7 @@ function StudentLoginForm() {
   };
 
   const googleLogin = () => {
-    const callbackUrl =
-      "/student-login?next=" + encodeURIComponent(next);
+    const callbackUrl = "/student-login?next=" + encodeURIComponent(next);
     signIn("google", { callbackUrl });
   };
 
@@ -172,7 +169,6 @@ function StudentLoginForm() {
         </p>
       </div>
 
-      {/* Google Login — added, nothing removed */}
       <button
         type="button"
         onClick={googleLogin}

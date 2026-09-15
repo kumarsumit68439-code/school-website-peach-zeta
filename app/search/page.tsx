@@ -1,4 +1,8 @@
 "use client";
 
-/** Alias page — same as /browser so old links work */
-export { default } from "../browser/page";
+import BrowserPage from "../browser/page";
+
+/** Same UI as /browser */
+export default function SearchPage() {
+  return <BrowserPage />;
+}
