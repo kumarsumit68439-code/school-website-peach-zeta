@@ -36,30 +36,30 @@ async function getSecretsFromSupabase() {
   }
 }
 
+/** Priority: 1) Vercel env  2) Supabase  3) request header */
 async function resolveKey(req: NextRequest) {
-  // 1) Header (page form)
-  const headerKey = (req.headers.get("x-browserbase-key") || "").trim();
-  if (headerKey) return { apiKey: headerKey, projectId: "", source: "header" };
-
-  // 2) Supabase site_secrets (preferred)
-  const fromSb = await getSecretsFromSupabase();
-  if (fromSb.apiKey) return { ...fromSb, source: "supabase" };
-
-  // 3) Vercel env fallback
   const envKey = (
     process.env.BROWSERBASE_API_KEY ||
     process.env.NEXT_PUBLIC_BROWSERBASE_API_KEY ||
     ""
   ).trim();
+  const envProject = (process.env.BROWSERBASE_PROJECT_ID || "").trim();
+
   if (envKey) {
-    return {
-      apiKey: envKey,
-      projectId: (process.env.BROWSERBASE_PROJECT_ID || "").trim(),
-      source: "vercel",
-    };
+    return { apiKey: envKey, projectId: envProject, source: "vercel" as const };
   }
 
-  return { apiKey: "", projectId: "", source: "none" };
+  const fromSb = await getSecretsFromSupabase();
+  if (fromSb.apiKey) {
+    return { ...fromSb, source: "supabase" as const };
+  }
+
+  const headerKey = (req.headers.get("x-browserbase-key") || "").trim();
+  if (headerKey) {
+    return { apiKey: headerKey, projectId: "", source: "header" as const };
+  }
+
+  return { apiKey: "", projectId: "", source: "none" as const };
 }
 
 export async function POST(req: NextRequest) {
@@ -67,8 +67,9 @@ export async function POST(req: NextRequest) {
   if (!resolved.apiKey) {
     return json({
       success: false,
-      error: "BROWSERBASE_API_KEY missing",
-      hint: "Browserbase page pe API key save karo — Supabase me store hoga (Vercel env zaroori nahi).",
+      error: "BROWSERBASE_API_KEY missing on Vercel",
+      hint:
+        "Vercel → Project Settings → Environment Variables → Name: BROWSERBASE_API_KEY → Value: your key → Production+Preview → Save → Redeploy",
     });
   }
 
@@ -105,7 +106,8 @@ export async function POST(req: NextRequest) {
     if (!createRes.ok) {
       return json({
         success: false,
-        error: session?.message || session?.error || "Session create failed",
+        error: session?.message || session?.error || "Browserbase rejected the key / session",
+        details: session,
       });
     }
 
@@ -146,22 +148,20 @@ export async function POST(req: NextRequest) {
   }
 }
 
+/** Status: is Vercel env key present? (never returns the key) */
 export async function GET(req: NextRequest) {
   const resolved = await resolveKey(req);
-  if (!resolved.apiKey) {
-    return json({ success: false, sessions: [], error: "No key in Supabase" });
-  }
-  try {
-    const res = await fetch("https://api.browserbase.com/v1/sessions", {
-      headers: { "x-bb-api-key": resolved.apiKey },
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      return json({ success: false, sessions: [], error: data?.message || "Failed" });
-    }
-    const list = Array.isArray(data) ? data : data.sessions || data.data || [];
-    return json({ success: true, keySource: resolved.source, sessions: list.slice(0, 20) });
-  } catch (e) {
-    return json({ success: false, sessions: [], error: String(e) });
-  }
+  return json({
+    success: true,
+    hasKey: Boolean(resolved.apiKey),
+    keySource: resolved.source,
+    message:
+      resolved.source === "vercel"
+        ? "BROWSERBASE_API_KEY found on Vercel ✓"
+        : resolved.source === "supabase"
+          ? "Key found in Supabase"
+          : resolved.source === "header"
+            ? "Key from request header"
+            : "No key — set BROWSERBASE_API_KEY on Vercel and Redeploy",
+  });
 }

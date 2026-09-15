@@ -22,59 +22,19 @@ export default function BrowserbasePage() {
   const [mode, setMode] = useState<"home" | "results" | "page" | "cloud">("home");
   const [cloudLoading, setCloudLoading] = useState(false);
   const [session, setSession] = useState<SessionInfo | null>(null);
-  const [apiKey, setApiKey] = useState("");
-  const [projectId, setProjectId] = useState("");
   const [cloudMsg, setCloudMsg] = useState("");
-  const [keyStatus, setKeyStatus] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [envStatus, setEnvStatus] = useState("Checking Vercel key…");
   const [hasKey, setHasKey] = useState(false);
-  const [masked, setMasked] = useState("");
 
   useEffect(() => {
-    fetch("/api/browserbase/key")
+    fetch("/api/browserbase/session")
       .then((r) => r.json())
       .then((d) => {
-        if (d.hasKey) {
-          setHasKey(true);
-          setMasked(d.masked || "••••");
-          setKeyStatus("Supabase me key save hai ✓");
-          if (d.projectId) setProjectId(d.projectId);
-        } else {
-          setKeyStatus("Abhi Supabase me key nahi — neeche paste karke Save karo");
-        }
+        setHasKey(Boolean(d.hasKey));
+        setEnvStatus(d.message || (d.hasKey ? "Key OK" : "Key missing"));
       })
-      .catch(() => setKeyStatus(""));
+      .catch(() => setEnvStatus("Status check failed"));
   }, []);
-
-  const saveKeyToSupabase = async () => {
-    if (!apiKey.trim()) {
-      setCloudMsg("Pehle Browserbase API key paste karo");
-      return;
-    }
-    setSaving(true);
-    setCloudMsg("");
-    try {
-      const res = await fetch("/api/browserbase/key", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey: apiKey.trim(), projectId: projectId.trim() }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setHasKey(true);
-        setMasked(apiKey.trim().slice(0, 4) + "••••" + apiKey.trim().slice(-4));
-        setKeyStatus("Supabase me save ho gayi ✓ (Vercel env ki zaroorat nahi)");
-        setCloudMsg("Key saved in Supabase. Ab Start Cloud dabao.");
-        setApiKey("");
-      } else {
-        setCloudMsg(data.error || "Save fail");
-      }
-    } catch (e) {
-      setCloudMsg(String(e));
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const doSearch = useCallback(async (query: string) => {
     const qq = query.trim();
@@ -96,9 +56,8 @@ export default function BrowserbasePage() {
           url: "https://rajeduboard.rajasthan.gov.in/main.asp",
           snippet: "Board home",
         },
-        { title: "School Results", url: "/result", snippet: "This website" },
       ]);
-      setNote("Fallback results");
+      setNote("Fallback");
     } finally {
       setLoading(false);
     }
@@ -117,35 +76,23 @@ export default function BrowserbasePage() {
     setCloudLoading(true);
     setCloudMsg("");
     try {
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      // Optional one-time header if not yet in Supabase
-      if (apiKey.trim()) headers["x-browserbase-key"] = apiKey.trim();
-
       const res = await fetch("/api/browserbase/session", {
         method: "POST",
-        headers,
-        body: JSON.stringify({
-          url: viewUrl || undefined,
-          projectId: projectId.trim() || undefined,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: viewUrl || undefined }),
       });
       const data = await res.json().catch(() => ({}));
       if (!data.success) {
-        setCloudMsg(
-          data.hint ||
-            data.error ||
-            "Key nahi mili — neeche API key Save to Supabase karo"
-        );
+        setCloudMsg(data.hint || data.error || "Failed");
         setMode("home");
         return;
       }
       setSession(data.session);
       setMode("cloud");
-      if (data.keySource === "supabase") {
-        setKeyStatus("Key Supabase se load hui ✓");
-      }
+      setEnvStatus("Key from " + (data.keySource || "server") + " ✓");
+      setHasKey(true);
     } catch {
-      setCloudMsg("Network issue");
+      setCloudMsg("Network error");
       setMode("home");
     } finally {
       setCloudLoading(false);
@@ -213,52 +160,55 @@ export default function BrowserbasePage() {
           <div className="p-5 space-y-4">
             <div className="text-center">
               <div className="text-4xl mb-2">🌐</div>
-              <p className="font-medium">Search free · Cloud optional</p>
+              <p className="font-medium">Search free · Cloud via Vercel key</p>
             </div>
 
-            <div className="rounded-xl border border-green-100 bg-green-50 p-3 text-xs text-green-900">
-              <p className="font-semibold mb-1">API key → Supabase (Vercel nahi)</p>
-              <p>{keyStatus || "Loading…"}</p>
-              {hasKey && masked ? <p className="mt-1 font-mono">Saved: {masked}</p> : null}
+            <div
+              className={`rounded-xl border p-3 text-xs ${
+                hasKey
+                  ? "border-green-200 bg-green-50 text-green-900"
+                  : "border-amber-200 bg-amber-50 text-amber-900"
+              }`}
+            >
+              <p className="font-semibold mb-1">Vercel API Key status</p>
+              <p>{envStatus}</p>
             </div>
 
             {cloudMsg ? (
-              <div className="rounded-xl bg-amber-50 text-amber-900 text-xs p-3">{cloudMsg}</div>
+              <div className="rounded-xl bg-red-50 text-red-800 text-xs p-3 whitespace-pre-wrap">
+                {cloudMsg}
+              </div>
             ) : null}
 
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-slate-600">Browserbase API Key</label>
-              <input
-                className="w-full border rounded-xl px-3 py-2.5 text-sm font-mono"
-                type="password"
-                placeholder="bb_... paste here"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                autoComplete="off"
-              />
-              <input
-                className="w-full border rounded-xl px-3 py-2.5 text-sm font-mono"
-                placeholder="Project ID (optional)"
-                value={projectId}
-                onChange={(e) => setProjectId(e.target.value)}
-              />
-              <button
-                type="button"
-                onClick={saveKeyToSupabase}
-                disabled={saving}
-                className="w-full py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold disabled:opacity-60"
-              >
-                {saving ? "Saving…" : "💾 Save key to Supabase"}
-              </button>
-              <button
-                type="button"
-                onClick={startCloud}
-                disabled={cloudLoading}
-                className="w-full py-2.5 rounded-xl bg-slate-800 text-white text-sm font-semibold disabled:opacity-60"
-              >
-                {cloudLoading ? "Starting…" : "☁️ Start Cloud Chrome"}
-              </button>
+            <div className="rounded-xl border border-slate-200 p-3 text-xs text-slate-600 space-y-2">
+              <p className="font-semibold text-slate-800">Vercel pe key set karo (paste page pe nahi)</p>
+              <ol className="list-decimal pl-4 space-y-1">
+                <li>vercel.com → project <b>school-website-peach-zeta</b></li>
+                <li>Settings → Environment Variables</li>
+                <li>
+                  Name: <code className="bg-slate-100 px-1">BROWSERBASE_API_KEY</code>
+                </li>
+                <li>Value: aapki Browserbase key</li>
+                <li>Environment: Production + Preview + Development</li>
+                <li>Save</li>
+                <li>Deployments → ⋮ → Redeploy (Important!)</li>
+              </ol>
+              <p>
+                Optional: <code className="bg-slate-100 px-1">BROWSERBASE_PROJECT_ID</code>
+              </p>
             </div>
+
+            <button
+              type="button"
+              onClick={startCloud}
+              disabled={cloudLoading}
+              className="w-full py-3 rounded-xl bg-slate-800 text-white text-sm font-semibold disabled:opacity-60"
+            >
+              {cloudLoading ? "Starting…" : "☁️ Start Cloud Chrome (Vercel key)"}
+            </button>
+            <p className="text-[11px] text-center text-slate-400">
+              Key set + Redeploy ke baad Start dabao · Search bina key ke chalega
+            </p>
           </div>
         )}
 
