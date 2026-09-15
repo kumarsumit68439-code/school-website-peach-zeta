@@ -11,6 +11,7 @@ const PUBLIC = [
   "/api-docs",
   "/api-keys",
   "/api-client",
+  "/browser",
 ];
 
 export default function StudentGate({ children }: { children: React.ReactNode }) {
