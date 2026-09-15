@@ -1,43 +1,75 @@
 import { verifyApiKey, json } from "@/lib/apiAuth";
 
+/**
+ * Real RBSE results are only on official board portals.
+ * This API returns official URLs — never mock marks.
+ */
 export async function OPTIONS() {
   return json({ ok: true });
 }
 
-/** Mock RBSE-style result lookup by roll (public school portal style) */
 export async function GET(req: Request) {
   const auth = await verifyApiKey(req);
   if (!auth.ok) return json({ success: false, error: auth.error }, auth.status);
 
   const url = new URL(req.url);
-  const roll = url.searchParams.get("roll") || "0000";
-  const cls = url.searchParams.get("class") || "10";
+  const cls = (url.searchParams.get("class") || "10").toLowerCase();
+  const stream = (url.searchParams.get("stream") || "").toLowerCase();
+  const roll = url.searchParams.get("roll") || "";
 
-  // Deterministic mock from roll digits
-  let seed = 0;
-  for (let i = 0; i < roll.length; i++) seed += roll.charCodeAt(i);
-  const pct = 40 + (seed % 55);
-  const division =
-    pct >= 75 ? "First Division" : pct >= 60 ? "Second Division" : pct >= 45 ? "Third Division" : "Pass";
+  const BOARD = "https://rajeduboard.rajasthan.gov.in/RESULT2026";
+
+  const portals: Record<string, { label: string; url: string }> = {
+    "5": {
+      label: "Class 5 Shala Darpan",
+      url: "https://rajshaladarpan.rajasthan.gov.in/",
+    },
+    "8": {
+      label: "Class 8 Shala Darpan",
+      url: "https://rajshaladarpan.rajasthan.gov.in/",
+    },
+    "10": {
+      label: "Secondary & Vocational 2026",
+      url: `${BOARD}/SEV/Roll_Input.htm`,
+    },
+    "12": {
+      label:
+        stream === "commerce"
+          ? "Senior Secondary Commerce 2026"
+          : stream === "arts"
+          ? "Senior Secondary Arts 2026"
+          : "Senior Secondary Science 2026",
+      url:
+        stream === "commerce"
+          ? `${BOARD}/COMM/Roll_Input.htm`
+          : stream === "arts"
+          ? `${BOARD}/ARTS/Roll_Input.htm`
+          : `${BOARD}/SCIENCE/Roll_Input.htm`,
+    },
+    hub: {
+      label: "All Results 2026",
+      url: `${BOARD}/Result2026.htm`,
+    },
+  };
+
+  const selected = portals[cls] || portals["10"];
 
   return json({
     success: true,
-    type: "mock_rbse_sheet",
+    message:
+      "RBSE does not publish a public bulk API for marksheets. Use official portal with roll number.",
+    mock: false,
+    demo: false,
+    roll_hint: roll || null,
     class: cls,
-    roll,
-    percentage: pct,
-    division,
-    subjects: [
-      { name: "Hindi", marks: 40 + (seed % 50) },
-      { name: "English", marks: 35 + ((seed * 3) % 55) },
-      { name: "Maths", marks: 30 + ((seed * 7) % 60) },
-      { name: "Science", marks: 38 + ((seed * 5) % 52) },
-      { name: "Social", marks: 42 + ((seed * 2) % 48) },
+    stream: stream || null,
+    official: selected,
+    all_portals: portals,
+    instructions: [
+      "Open official.url in browser",
+      "Enter roll number from admit card",
+      "Submit to view real board marksheet",
     ],
-    official_links: {
-      "5_8": "https://rajshaladarpan.nic.in",
-      "10_12": "https://rajeduboard.rajasthan.gov.in",
-    },
-    note: "Mock result for API demo — verify on official board sites",
+    server_time: new Date().toISOString(),
   });
 }
