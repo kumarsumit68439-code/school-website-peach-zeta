@@ -8,7 +8,6 @@ function json(data: unknown, status = 200) {
 }
 
 function getKey(req: NextRequest) {
-  // Prefer server env; optional header for testing (never log key)
   return (
     process.env.BROWSERBASE_API_KEY ||
     process.env.NEXT_PUBLIC_BROWSERBASE_API_KEY ||
@@ -17,18 +16,16 @@ function getKey(req: NextRequest) {
   ).trim();
 }
 
-/** Create Browserbase cloud browser session */
 export async function POST(req: NextRequest) {
   const apiKey = getKey(req);
   if (!apiKey) {
     return json(
       {
         success: false,
-        error:
-          "BROWSERBASE_API_KEY missing. Add it in Vercel Environment Variables, or pass x-browserbase-key header.",
-        setup: "https://www.browserbase.com/ → Settings → API Key",
+        error: "BROWSERBASE_API_KEY missing",
+        hint: "Search bina key ke kaam karta hai. Cloud ke liye Vercel me BROWSERBASE_API_KEY add karo.",
       },
-      400
+      200
     );
   }
 
@@ -36,11 +33,10 @@ export async function POST(req: NextRequest) {
   try {
     body = await req.json();
   } catch {
-    /* empty body ok */
+    /* */
   }
 
-  const projectId =
-    body.projectId || process.env.BROWSERBASE_PROJECT_ID || undefined;
+  const projectId = body.projectId || process.env.BROWSERBASE_PROJECT_ID || undefined;
 
   try {
     const createRes = await fetch("https://api.browserbase.com/v1/sessions", {
@@ -61,19 +57,17 @@ export async function POST(req: NextRequest) {
       }),
     });
 
-    const session = await createRes.json();
+    const session = await createRes.json().catch(() => ({}));
     if (!createRes.ok) {
       return json(
         {
           success: false,
           error: session?.message || session?.error || "Session create failed",
-          details: session,
         },
-        createRes.status
+        200
       );
     }
 
-    // Live debugger / inspector URL
     let debuggerFullscreenUrl = "";
     let debuggerUrl = "";
     try {
@@ -84,11 +78,10 @@ export async function POST(req: NextRequest) {
       if (debugRes.ok) {
         const debug = await debugRes.json();
         debuggerUrl = debug.debuggerUrl || "";
-        debuggerFullscreenUrl =
-          debug.debuggerFullscreenUrl || debug.debuggerUrl || "";
+        debuggerFullscreenUrl = debug.debuggerFullscreenUrl || debug.debuggerUrl || "";
       }
     } catch {
-      /* optional */
+      /* */
     }
 
     return json({
@@ -101,35 +94,32 @@ export async function POST(req: NextRequest) {
         expiresAt: session.expiresAt,
         debuggerUrl: debuggerUrl || `https://www.browserbase.com/sessions/${session.id}`,
         debuggerFullscreenUrl:
-          debuggerFullscreenUrl ||
-          `https://www.browserbase.com/sessions/${session.id}`,
+          debuggerFullscreenUrl || `https://www.browserbase.com/sessions/${session.id}`,
         dashboard: `https://www.browserbase.com/sessions/${session.id}`,
         startUrl: body.url || "https://rajeduboard.rajasthan.gov.in/main.asp",
       },
-      message: "Cloud browser session created",
     });
   } catch (e) {
-    return json({ success: false, error: String(e) }, 500);
+    return json({ success: false, error: String(e) }, 200);
   }
 }
 
-/** List recent sessions */
 export async function GET(req: NextRequest) {
   const apiKey = getKey(req);
   if (!apiKey) {
-    return json({ success: false, error: "BROWSERBASE_API_KEY missing", sessions: [] }, 400);
+    return json({ success: false, sessions: [], error: "BROWSERBASE_API_KEY missing" }, 200);
   }
   try {
     const res = await fetch("https://api.browserbase.com/v1/sessions", {
       headers: { "x-bb-api-key": apiKey },
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      return json({ success: false, error: data?.message || "Failed", sessions: [] }, res.status);
+      return json({ success: false, sessions: [], error: data?.message || "Failed" }, 200);
     }
     const list = Array.isArray(data) ? data : data.sessions || data.data || [];
     return json({ success: true, sessions: list.slice(0, 20) });
   } catch (e) {
-    return json({ success: false, error: String(e), sessions: [] }, 500);
+    return json({ success: false, sessions: [], error: String(e) }, 200);
   }
 }
