@@ -11,6 +11,8 @@ type SavedKey = {
   raw?: string;
 };
 
+const PORTAL = "https://mggems-api-portal.vercel.app";
+
 export default function ApiKeysPage() {
   const [name, setName] = useState("School App Key");
   const [email, setEmail] = useState("");
@@ -40,13 +42,14 @@ export default function ApiKeysPage() {
         setError(data.error || "Failed");
         return;
       }
-      setNewKey(data.api_key);
+      const raw = data.api_key || data.key || data.apiKey;
+      setNewKey(raw);
       const meta: SavedKey = {
-        id: data.key_id,
+        id: data.key_id || data.id,
         name,
-        prefix: data.prefix,
+        prefix: data.prefix || raw?.slice(0, 12),
         createdAt: new Date().toISOString(),
-        raw: data.api_key,
+        raw,
       };
       const next = [meta, ...keys];
       setKeys(next);
@@ -74,9 +77,25 @@ export default function ApiKeysPage() {
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
       <h1 className="text-2xl font-bold text-navy-900 mb-1">🔑 API Keys</h1>
-      <p className="text-sm text-slate-500 mb-6">
-        Own API key generate karo · Bearer token se Supabase + Firebase backend connect
+      <p className="text-sm text-slate-500 mb-2">
+        Bearer token · SHA-256 hash in Supabase · raw key only once
       </p>
+      <p className="text-sm mb-6">
+        Full developer portal:{" "}
+        <a href={PORTAL} target="_blank" rel="noreferrer" className="text-navy-700 font-semibold underline">
+          mggems-api-portal.vercel.app
+        </a>
+      </p>
+
+      <div className="card mb-6 bg-navy-50 border border-navy-100">
+        <p className="text-sm text-navy-900">
+          Keys generate yahan ya{" "}
+          <a href={`${PORTAL}/keys`} className="underline font-semibold" target="_blank" rel="noreferrer">
+            API Portal → Generate Key
+          </a>{" "}
+          se kar sakte ho — dono same school backend use karte hain.
+        </p>
+      </div>
 
       <div className="card mb-6">
         <h2 className="font-bold text-navy-900 mb-3">Create new key</h2>
@@ -113,6 +132,14 @@ export default function ApiKeysPage() {
             >
               Test key
             </button>
+            <a
+              href={`${PORTAL}/client`}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 ml-3 text-xs underline text-navy-700"
+            >
+              Open API Client
+            </a>
           </div>
         )}
       </div>
@@ -148,10 +175,13 @@ export default function ApiKeysPage() {
         )}
       </div>
 
-      <p className="text-center text-sm mt-6">
+      <p className="text-center text-sm mt-6 space-x-4">
         <Link href="/api-docs" className="text-navy-700 font-semibold underline">
-          → Full API Documentation
+          API Docs
         </Link>
+        <a href={PORTAL} className="text-navy-700 font-semibold underline" target="_blank" rel="noreferrer">
+          Developer Portal
+        </a>
       </p>
     </div>
   );

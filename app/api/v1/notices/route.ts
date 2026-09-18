@@ -1,7 +1,9 @@
-import { verifyApiKey, json, adminDb } from "@/lib/apiAuth";
+import { verifyApiKey, json, adminDb, corsPreflight } from "@/lib/apiAuth";
+
+export const dynamic = "force-dynamic";
 
 export async function OPTIONS() {
-  return json({ ok: true });
+  return corsPreflight();
 }
 
 export async function GET(req: Request) {
@@ -12,7 +14,7 @@ export async function GET(req: Request) {
     .select("*")
     .order("created_at", { ascending: false })
     .limit(50);
-  if (error) return json({ success: false, error: error.message }, 500);
+  if (error) return json({ success: false, error: error.message, data: [] }, 500);
   return json({ success: true, count: data?.length || 0, data: data || [] });
 }
 
