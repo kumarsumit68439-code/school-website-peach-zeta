@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
+const PORTAL = "https://mggems-api-portal.vercel.app";
+
 function ClientInner() {
   const params = useSearchParams();
   const [key, setKey] = useState("");
@@ -13,7 +15,6 @@ function ClientInner() {
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState("all");
 
-  // OAuth-style callback: ?access_token=... from redirect
   useEffect(() => {
     const t =
       params.get("access_token") ||
@@ -28,7 +29,7 @@ function ClientInner() {
 
   const load = async (resource = "all") => {
     if (!key.trim()) {
-      setError("API key likho");
+      setError("API key likho (portal se generate karo)");
       return;
     }
     setLoading(true);
@@ -62,7 +63,7 @@ function ClientInner() {
     <div className="max-w-5xl mx-auto px-4 py-10">
       <h1 className="text-2xl font-bold text-navy-900 mb-1">🔌 API Client Access</h1>
       <p className="text-sm text-slate-500 mb-4">
-        Bina student/staff login — sirf API key se saara school data screen pe
+        Bina student/staff login — sirf API key se school data test karo
       </p>
 
       <div className="card mb-6 space-y-3">
@@ -93,12 +94,16 @@ function ClientInner() {
         {error && <p className="text-sm text-red-600">{error}</p>}
         <p className="text-xs text-slate-500">
           Key nahi hai?{" "}
-          <Link href="/api-keys" className="underline text-navy-700">
-            Generate API Key
-          </Link>
+          <a href={`${PORTAL}/keys`} className="underline text-navy-700 font-medium" target="_blank" rel="noreferrer">
+            Portal pe Generate Key
+          </a>
           {" · "}
           <Link href="/api-docs" className="underline text-navy-700">
             Docs
+          </Link>
+          {" · "}
+          <Link href="/api-keys" className="underline text-navy-700">
+            Key info
           </Link>
         </p>
       </div>

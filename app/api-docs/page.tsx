@@ -33,18 +33,31 @@ export default function ApiDocsPage() {
         Real backend · Supabase + Firebase · Bearer token · SHA-256 hashed keys
       </p>
       <div className="flex flex-wrap gap-3 text-sm mb-8">
-        <Link href="/api-keys" className="text-navy-700 font-semibold underline">
-          Generate key (school site)
+        <a
+          href={`${PORTAL}/keys`}
+          target="_blank"
+          rel="noreferrer"
+          className="text-navy-700 font-semibold underline"
+        >
+          Generate key (API Portal only)
+        </a>
+        <Link href="/api-client" className="text-navy-700 font-semibold underline">
+          API Client Test
         </Link>
-        <a href={`${PORTAL}/keys`} target="_blank" rel="noreferrer" className="text-navy-700 font-semibold underline">
-          Generate key (API Portal)
-        </a>
         <a href={`${PORTAL}/client`} target="_blank" rel="noreferrer" className="text-navy-700 font-semibold underline">
-          Try API Client
+          Portal Client
         </a>
-        <a href={PORTAL} target="_blank" rel="noreferrer" className="text-navy-700 font-semibold underline">
-          Developer Portal home
-        </a>
+        <Link href="/api-keys" className="text-navy-700 font-semibold underline">
+          Key info
+        </Link>
+      </div>
+
+      <div className="card mb-6 bg-amber-50 border border-amber-100 text-sm text-amber-900">
+        <strong>Note:</strong> API key create/generate sirf{" "}
+        <a href={`${PORTAL}/keys`} className="underline font-semibold" target="_blank" rel="noreferrer">
+          mggems-api-portal.vercel.app/keys
+        </a>{" "}
+        pe. School website pe key form nahi hai — Docs + Client test yahan available hain.
       </div>
 
       <div className="card mb-8">
@@ -62,22 +75,18 @@ export default function ApiDocsPage() {
           </a>
         </p>
         <ul className="text-sm text-slate-600 list-disc pl-5 space-y-1">
-          <li>POST /api/v1/keys/create — create key (no auth)</li>
+          <li>POST /api/v1/keys/create — called by Portal only (UI)</li>
           <li>GET /api/v1/auth/verify — validate key</li>
           <li>GET|POST /api/v1/notices</li>
           <li>GET /api/v1/admissions</li>
           <li>GET /api/v1/attendance</li>
+          <li>GET /api/v1/data?resource=all</li>
         </ul>
       </div>
 
       <Block
         title="cURL"
-        code={`# Create key
-curl -s -X POST ${base}/api/v1/keys/create \\
-  -H "Content-Type: application/json" \\
-  -d '{"name":"Portal App","email":"you@gmail.com"}'
-
-# Verify
+        code={`# Verify (key from portal)
 curl -s ${base}/api/v1/auth/verify \\
   -H "Authorization: Bearer mggems_YOUR_KEY"
 
@@ -89,7 +98,7 @@ curl -s ${base}/api/v1/notices \\
       <Block
         title="JavaScript Fetch"
         code={`const API = "${base}";
-const KEY = "mggems_YOUR_KEY";
+const KEY = "mggems_YOUR_KEY"; // from portal
 
 const res = await fetch(API + "/api/v1/notices", {
   headers: { Authorization: "Bearer " + KEY },
@@ -100,9 +109,8 @@ console.log(await res.json());`}
       <div className="card text-sm text-slate-600">
         <h2 className="font-bold text-navy-900 mb-2">Connected products</h2>
         <ul className="list-disc pl-5 space-y-1">
-          <li>School website: {base}</li>
-          <li>API Portal: {PORTAL}</li>
-          <li>Keys stored hashed in Supabase table <code>api_keys</code></li>
+          <li>School website (docs + client test): {base}</li>
+          <li>API Portal (key generate): {PORTAL}</li>
         </ul>
       </div>
     </div>
